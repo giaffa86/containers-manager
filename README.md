@@ -4,6 +4,8 @@ GNOME Shell extension to manage Podman or Docker containers from the top panel.
 
 The interface is visually inspired by [Copyous](https://github.com/boerdereinar/copyous/), borrowing its compact modal layout and polished GNOME-oriented interaction style while remaining focused on container management.
 
+![Containers Manager screenshot](screenshots/containers-manager.png)
+
 ## Requirements
 
 - GNOME Shell 50
