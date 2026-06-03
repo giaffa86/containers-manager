@@ -1,0 +1,10 @@
+{
+  "name": "Containers Manager",
+  "description": "Manage Podman and Docker containers through a GNOME Shell menu. Supports Start, Stop, Remove, Pause, Restart, Top Resources, Shell Access, Live Stats, Logs Monitoring, and Inspect Info. Uses clipboard access only when Copy Inspect is clicked.",
+  "uuid": "containers-manager@giaffa86",
+  "url": "https://github.com/giaffa86/containers-manager",
+  "shell-version": [
+    "50"
+  ],
+  "settings-schema": "org.gnome.shell.extensions.containers-manager"
+}

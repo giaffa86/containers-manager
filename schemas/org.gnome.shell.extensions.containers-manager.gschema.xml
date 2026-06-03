@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.containers-manager" path="/org/gnome/shell/extensions/containers-manager/">
+    <key name="container-runtime" type="s">
+      <default>"podman"</default>
+      <description>The container runtime to use (podman or docker)</description>
+    </key>
+
+    <key name="sort-by" type="s">
+      <default>"created"</default>
+      <description>Sort containers by this field</description>
+    </key>
+
+    <key name="terminal" type="s">
+      <default>"ptyxis --"</default>
+      <description>The terminal program and arguments to use for shell, logs, stats, and top commands</description>
+    </key>
+
+    <key name="open-dialog-shortcut" type="as">
+      <default>["&lt;Super&gt;&lt;Shift&gt;c"]</default>
+      <description>Keyboard shortcut used to open or close the containers dialog</description>
+    </key>
+
+    <key name="indicator-display" type="s">
+      <choices>
+        <choice value="icon-only"/>
+        <choice value="icon-count"/>
+      </choices>
+      <default>"icon-only"</default>
+      <description>How the panel indicator is displayed</description>
+    </key>
+
+    <key name="default-status-filter" type="s">
+      <choices>
+        <choice value="all"/>
+        <choice value="running"/>
+        <choice value="stopped"/>
+        <choice value="paused"/>
+        <choice value="other"/>
+      </choices>
+      <default>"all"</default>
+      <description>Status filter selected when the dialog opens without remembered state</description>
+    </key>
+
+    <key name="remember-dialog-state" type="b">
+      <default>true</default>
+      <description>Whether to remember search and filter state between dialog openings</description>
+    </key>
+
+    <key name="show-stopped" type="b">
+      <default>true</default>
+      <description>Whether stopped containers are visible in the dialog</description>
+    </key>
+
+    <key name="status-filter" type="s">
+      <choices>
+        <choice value="all"/>
+        <choice value="running"/>
+        <choice value="stopped"/>
+        <choice value="paused"/>
+        <choice value="other"/>
+      </choices>
+      <default>"all"</default>
+      <description>Last selected status filter</description>
+    </key>
+
+    <key name="favorites-only" type="b">
+      <default>false</default>
+      <description>Whether only favorite containers are visible in the dialog</description>
+    </key>
+
+    <key name="search-text" type="s">
+      <default>""</default>
+      <description>Last search text used in the dialog</description>
+    </key>
+  </schema>
+</schemalist>
