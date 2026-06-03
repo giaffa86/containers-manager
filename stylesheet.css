@@ -261,6 +261,27 @@
     border-color: -st-accent-color;
 }
 
+.dialog-card.hidden-card {
+    background-color: rgba(255, 255, 255, 0.025);
+    border-color: rgba(255, 255, 255, 0.045);
+    color: rgba(255, 255, 255, 0.58);
+}
+
+.dialog-card.hidden-card:hover {
+    background-color: rgba(255, 255, 255, 0.045);
+    color: rgba(255, 255, 255, 0.72);
+}
+
+.dialog-card.hidden-card.selected {
+    background-color: rgba(255, 255, 255, 0.035);
+    border-color: rgba(119, 168, 232, 0.62);
+}
+
+.dialog-card.hidden-card .card-subtitle,
+.dialog-card.hidden-card .card-meta-item {
+    opacity: 0.48;
+}
+
 .dialog-card:focus {
     border-color: -st-accent-color;
     box-shadow: inset 0 0 0 1px rgba(119, 168, 232, 0.45);

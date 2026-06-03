@@ -69,6 +69,16 @@
       <description>Whether only favorite containers are visible in the dialog</description>
     </key>
 
+    <key name="show-hidden" type="b">
+      <default>false</default>
+      <description>Whether hidden containers are visible in the dialog</description>
+    </key>
+
+    <key name="hidden-container-ids" type="as">
+      <default>[]</default>
+      <description>Container IDs hidden from the dialog by the user</description>
+    </key>
+
     <key name="search-text" type="s">
       <default>""</default>
       <description>Last search text used in the dialog</description>

@@ -20,6 +20,7 @@ export default class ContainersManagerExtension extends Extension {
         this._settings = this.getSettings();
         this._settingsConnections = [];
         this._favoriteIds = new Set();
+        this._hiddenIds = new Set();
         this._selectedContainerId = null;
         this._syncProcess = null;
         this._syncGeneration = 0;
@@ -27,6 +28,7 @@ export default class ContainersManagerExtension extends Extension {
 
         Runtime.setRuntime(this._settings.get_string("container-runtime"));
         this._loadDialogStateFromSettings();
+        this._loadHiddenStateFromSettings();
 
         this._dialog = new ContainerDialog(this);
 
@@ -121,6 +123,15 @@ export default class ContainersManagerExtension extends Extension {
             this._dialog._syncControlsFromState();
             this._dialog._applyFilters();
         }));
+        this._settingsConnections.push(this._settings.connect("changed::show-hidden", () => {
+            this._showHidden = this._settings.get_boolean("show-hidden");
+            this._dialog._syncFilterMenu();
+            this._dialog._applyFilters();
+        }));
+        this._settingsConnections.push(this._settings.connect("changed::hidden-container-ids", () => {
+            this._hiddenIds = new Set(this._settings.get_strv("hidden-container-ids"));
+            this._dialog._applyFilters();
+        }));
     }
 
     _addKeybinding() {
@@ -155,6 +166,11 @@ export default class ContainersManagerExtension extends Extension {
         this._searchText = remember ? this._settings.get_string("search-text").toLowerCase() : "";
     }
 
+    _loadHiddenStateFromSettings() {
+        this._showHidden = this._settings.get_boolean("show-hidden");
+        this._hiddenIds = new Set(this._settings.get_strv("hidden-container-ids"));
+    }
+
     _persistDialogState() {
         if (!this._settings.get_boolean("remember-dialog-state"))
             return;
@@ -163,6 +179,11 @@ export default class ContainersManagerExtension extends Extension {
         this._settings.set_string("status-filter", this._statusFilter);
         this._settings.set_boolean("favorites-only", this._favoritesOnly);
         this._settings.set_string("search-text", this._searchText);
+    }
+
+    _persistHiddenState() {
+        this._settings.set_boolean("show-hidden", this._showHidden);
+        this._settings.set_strv("hidden-container-ids", [...this._hiddenIds]);
     }
 
     _resetTransientDialogState() {
@@ -233,6 +254,16 @@ export default class ContainersManagerExtension extends Extension {
             if (!aP && bP) return 1;
             return 0;
         });
+    }
+
+    _toggleHidden(containerId) {
+        if (this._hiddenIds.has(containerId))
+            this._hiddenIds.delete(containerId);
+        else
+            this._hiddenIds.add(containerId);
+
+        this._persistHiddenState();
+        return this._hiddenIds.has(containerId);
     }
 }
 
@@ -365,6 +396,8 @@ class ContainerDialog extends St.Widget {
         this._addFilterOption("stopped", "Stopped", "media-playback-stop-symbolic");
         this._addFilterOption("paused", "Paused", "media-playback-pause-symbolic");
         this._addFilterOption("other", "Other states", "action-unavailable-symbolic");
+        this._filterMenu.add_child(new St.Bin({style_class: "container-action-menu-separator"}));
+        this._addHiddenFilterOption();
         this._syncFilterMenu();
 
         // --- Separator ---
@@ -388,6 +421,11 @@ class ContainerDialog extends St.Widget {
         this._actionMenu = new ContainerActionMenu({
             onClose: () => this._closeContextMenu(),
             onInspectCopied: (details) => this._showInspectDetails(details),
+            isHidden: (containerId) => this._ext._hiddenIds.has(containerId),
+            onToggleHidden: (container) => {
+                this._ext._toggleHidden(container.id);
+                this._applyFilters();
+            },
             onDelete: (container) => {
                 this._closeContextMenu();
                 new RemoveContainerDialog(container).open(1, true);
@@ -592,6 +630,15 @@ class ContainerDialog extends St.Widget {
         let sorted = this._ext._sortFavoritesFirst(containers);
         this._ext._updateIndicatorCount(containers);
         const currentIds = new Set(sorted.map(c => c.id));
+        let hiddenChanged = false;
+        for (const id of this._ext._hiddenIds) {
+            if (!currentIds.has(id)) {
+                this._ext._hiddenIds.delete(id);
+                hiddenChanged = true;
+            }
+        }
+        if (hiddenChanged)
+            this._ext._persistHiddenState();
 
         if (this._ext._selectedContainerId && !currentIds.has(this._ext._selectedContainerId))
             this._ext._selectedContainerId = null;
@@ -614,12 +661,14 @@ class ContainerDialog extends St.Widget {
                 card.update(
                     container,
                     this._ext._favoriteIds.has(container.id),
+                    this._ext._hiddenIds.has(container.id),
                     this._ext._selectedContainerId === container.id
                 );
                 this._cardList.set_child_at_index(card, index);
             } else {
                 const card = new ContainerCard(container, {
                     favorite: this._ext._favoriteIds.has(container.id),
+                    hidden: this._ext._hiddenIds.has(container.id),
                     selected: this._ext._selectedContainerId === container.id,
                     onSelect: (selectedCard) => this._selectCard(selectedCard),
                     onMoveFocus: (backward, current) => this._moveKeyboardFocus(backward, current),
@@ -656,10 +705,15 @@ class ContainerDialog extends St.Widget {
         const showStopped = this._ext._showStopped;
         const statusFilter = this._ext._statusFilter;
         const favoritesOnly = this._ext._favoritesOnly;
+        const showHidden = this._ext._showHidden;
         let visibleCount = 0;
 
         for (const [, card] of this._containerCards) {
             let visible = true;
+            const hidden = this._ext._hiddenIds.has(card._container.id);
+            card.setHidden(hidden);
+            if (!showHidden && hidden)
+                visible = false;
             if (searchText && !card._container.name.toLowerCase().includes(searchText))
                 visible = false;
             if (!showStopped && card._isStopped())
@@ -721,6 +775,40 @@ class ContainerDialog extends St.Widget {
         this._statusFilterIcons.set(value, {iconName, checkIcon});
     }
 
+    _addHiddenFilterOption() {
+        const btn = new St.Button({
+            style_class: "dialog-filter-option",
+            toggle_mode: true,
+            x_expand: true,
+            can_focus: true,
+        });
+        const row = new St.BoxLayout({style_class: "dialog-filter-option-row"});
+        row.add_child(new St.Icon({icon_name: "view-reveal-symbolic", icon_size: 14, style_class: "popup-menu-icon"}));
+        row.add_child(new St.Label({
+            text: "Show hidden",
+            style_class: "dialog-filter-option-label",
+            y_align: Clutter.ActorAlign.CENTER,
+            x_expand: true,
+        }));
+        const checkIcon = new St.Icon({
+            icon_name: "object-select-symbolic",
+            icon_size: 14,
+            style_class: "dialog-filter-check",
+            visible: false,
+        });
+        row.add_child(checkIcon);
+        btn.child = row;
+        btn.connect("clicked", () => {
+            this._ext._showHidden = btn.checked;
+            this._ext._persistHiddenState();
+            this._syncFilterMenu();
+            this._applyFilters();
+        });
+        this._filterMenu.add_child(btn);
+        this._showHiddenBtn = btn;
+        this._showHiddenCheckIcon = checkIcon;
+    }
+
     _toggleFilterMenu() {
         this._setFilterMenuOpen(!this._filterMenu.visible);
         if (this._filterMenu.visible)
@@ -755,6 +843,10 @@ class ContainerDialog extends St.Widget {
 
         const selected = this._statusFilterIcons.get(this._ext._statusFilter);
         this._filterToggleIcon.icon_name = selected?.iconName ?? "view-list-symbolic";
+        if (this._showHiddenBtn) {
+            this._showHiddenBtn.checked = this._ext._showHidden;
+            this._showHiddenCheckIcon.visible = this._ext._showHidden;
+        }
     }
 
     _syncControlsFromState() {
@@ -1081,7 +1173,7 @@ class ContainerDialog extends St.Widget {
 
     _focusableActors() {
         if (this._filterMenu.visible)
-            return [...this._statusFilterButtons.values()].filter(actor =>
+            return [...this._statusFilterButtons.values(), this._showHiddenBtn].filter(actor =>
                 actor?.visible &&
                 actor.mapped &&
                 actor.reactive &&
@@ -1226,6 +1318,7 @@ class ContainerActionMenu extends St.BoxLayout {
         const category = statusCategory(this._container.status);
         const isRunning = category === "running";
         const isPaused = category === "paused";
+        const isHidden = this._opts.isHidden?.(this._container.id) ?? false;
 
         if (isRunning)
             this._addAction("Pause", "media-playback-pause-symbolic", () => this._container.pause());
@@ -1234,6 +1327,16 @@ class ContainerActionMenu extends St.BoxLayout {
 
         if (isRunning || isPaused)
             this._addSeparator();
+
+        this._addAction(
+            isHidden ? "Show" : "Hide",
+            isHidden ? "view-reveal-symbolic" : "view-conceal-symbolic",
+            () => {
+                if (this._opts.onToggleHidden)
+                    this._opts.onToggleHidden(this._container);
+            }
+        );
+        this._addSeparator();
 
         this._addAction("Top Resources", "view-list-symbolic", () => this._container.watchTop());
         this._addAction("Open Shell", "utilities-terminal-symbolic", () => this._container.shell());
@@ -1308,6 +1411,7 @@ class ContainerCard extends St.BoxLayout {
         this._container = container;
         this._opts = opts;
         this._selected = opts.selected || false;
+        this._hidden = opts.hidden || false;
         this.connect("enter-event", () => {
             this.add_style_pseudo_class("hover");
             return Clutter.EVENT_PROPAGATE;
@@ -1512,15 +1616,21 @@ class ContainerCard extends St.BoxLayout {
         return statusCategory(this._container.status);
     }
 
-    update(container, favorite, selected) {
+    update(container, favorite, hidden, selected) {
         this._container = container;
         this._favoriteBtn.checked = favorite;
+        this._hidden = hidden;
         this._selected = selected;
         this._updateFromContainer(container);
     }
 
     setSelected(selected) {
         this._selected = selected;
+        this._updateStyleClass();
+    }
+
+    setHidden(hidden) {
+        this._hidden = hidden;
         this._updateStyleClass();
     }
 
@@ -1587,7 +1697,8 @@ class ContainerCard extends St.BoxLayout {
 
     _updateStyleClass() {
         const selectedClass = this._selected ? " selected" : "";
-        this.style_class = `dialog-card ${this._cardClass || ""}${selectedClass}`;
+        const hiddenClass = this._hidden ? " hidden-card" : "";
+        this.style_class = `dialog-card ${this._cardClass || ""}${hiddenClass}${selectedClass}`;
     }
 }
 
