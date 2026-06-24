@@ -32,13 +32,11 @@ function ellipsizeLabel(label) {
 export default class ContainersManagerExtension extends Extension {
     enable() {
         this._settings = this.getSettings();
-        this._settingsConnections = [];
         this._favoriteIds = new Set();
         this._hiddenIds = new Set();
         this._selectedContainerId = null;
         this._syncProcess = null;
         this._syncGeneration = 0;
-        this._indicatorSignals = [];
 
         Runtime.setRuntime(this._settings.get_string("container-runtime"));
         this._loadDialogStateFromSettings();
@@ -66,21 +64,21 @@ export default class ContainersManagerExtension extends Extension {
         this._indicatorBox.add_child(this._indicatorCountLabel);
         this._indicator.add_child(this._indicatorBox);
 
-        this._indicatorSignals.push(this._indicator.connect("button-press-event", (_actor, event) => {
+        this._indicator.connectObject("button-press-event", (_actor, event) => {
             if (event.get_button() === Clutter.BUTTON_PRIMARY) {
                 this._dialog.toggle();
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;
-        }));
+        }, this);
 
-        this._indicatorSignals.push(this._indicator.connect("touch-event", (_actor, event) => {
+        this._indicator.connectObject("touch-event", (_actor, event) => {
             if (event.type() === Clutter.EventType.TOUCH_BEGIN) {
                 this._dialog.toggle();
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;
-        }));
+        }, this);
 
         Main.panel.addToStatusArea(this.uuid, this._indicator);
         this._addKeybinding();
@@ -92,18 +90,10 @@ export default class ContainersManagerExtension extends Extension {
     disable() {
         this._removeKeybinding();
         this._stopSync();
-        if (this._settings && this._settingsConnections) {
-            for (const id of this._settingsConnections)
-                this._settings.disconnect(id);
-        }
-        this._settingsConnections = [];
-        this._dialog?.destroy();
+        this._settings?.disconnectObject(this);
+        this._indicator?.disconnectObject(this);
+        this._dialog?.cleanup();
         this._dialog = null;
-        if (this._indicator && this._indicatorSignals) {
-            for (const id of this._indicatorSignals)
-                this._indicator.disconnect(id);
-        }
-        this._indicatorSignals = [];
         this._indicatorIcon?.destroy();
         this._indicatorCountLabel?.destroy();
         this._indicatorBox?.destroy();
@@ -116,42 +106,42 @@ export default class ContainersManagerExtension extends Extension {
     }
 
     _connectSettings() {
-        this._settingsConnections.push(this._settings.connect("changed::container-runtime", () => {
+        this._settings.connectObject("changed::container-runtime", () => {
             Runtime.setRuntime(this._settings.get_string("container-runtime"));
             if (this._dialog.opened)
                 this._dialog._refresh();
             else
                 this._refreshIndicatorCount();
-        }));
-        this._settingsConnections.push(this._settings.connect("changed::indicator-display", () => {
+        }, this);
+        this._settings.connectObject("changed::indicator-display", () => {
             this._syncIndicatorDisplay();
-        }));
-        this._settingsConnections.push(this._settings.connect("changed::default-status-filter", () => {
+        }, this);
+        this._settings.connectObject("changed::default-status-filter", () => {
             if (!this._settings.get_boolean("remember-dialog-state")) {
                 this._statusFilter = normalizeStatusFilter(this._settings.get_string("default-status-filter"));
                 this._dialog._syncFilterMenu();
                 this._dialog._applyFilters();
             }
-        }));
-        this._settingsConnections.push(this._settings.connect("changed::remember-dialog-state", () => {
+        }, this);
+        this._settings.connectObject("changed::remember-dialog-state", () => {
             this._loadDialogStateFromSettings();
             this._dialog._syncControlsFromState();
             this._dialog._applyFilters();
-        }));
-        this._settingsConnections.push(this._settings.connect("changed::show-hidden", () => {
+        }, this);
+        this._settings.connectObject("changed::show-hidden", () => {
             this._showHidden = this._settings.get_boolean("show-hidden");
             this._dialog._syncFilterMenu();
             this._dialog._applyFilters();
-        }));
-        this._settingsConnections.push(this._settings.connect("changed::hidden-container-ids", () => {
+        }, this);
+        this._settings.connectObject("changed::hidden-container-ids", () => {
             this._hiddenIds = new Set(this._settings.get_strv("hidden-container-ids"));
             this._dialog._applyFilters();
-        }));
-        this._settingsConnections.push(this._settings.connect("changed::favorite-container-ids", () => {
+        }, this);
+        this._settings.connectObject("changed::favorite-container-ids", () => {
             this._loadFavoriteStateFromSettings();
             this._dialog._refreshVisibleFavoriteState();
             this._dialog._applyFilters();
-        }));
+        }, this);
     }
 
     _addKeybinding() {
@@ -540,13 +530,13 @@ class ContainerDialog extends St.Widget {
         return this._open;
     }
 
-    destroy() {
+    cleanup() {
         if (this._open)
             this.close();
         this._cancelQueuedPositionBox();
         this._filterMenu?.destroy();
         this._filterMenu = null;
-        super.destroy();
+        this.destroy();
     }
 
     toggle() {
@@ -937,11 +927,11 @@ class ContainerDialog extends St.Widget {
 
         const category = statusCategory(container.status);
         if (action === "start" && category === "stopped")
-            container.start();
+            this._runContainerCommand(() => container.start());
         else if (action === "stop" && category === "running")
-            container.stop();
+            this._runContainerCommand(() => container.stop());
         else if (action === "restart" && (category === "running" || category === "paused"))
-            container.restart();
+            this._runContainerCommand(() => container.restart());
     }
 
     _runSelectedContainerStartStop() {
@@ -955,9 +945,19 @@ class ContainerDialog extends St.Widget {
     _toggleContainerRunState(container) {
         const category = statusCategory(container.status);
         if (category === "stopped")
-            container.start();
+            this._runContainerCommand(() => container.start());
         else if (category === "running")
-            container.stop();
+            this._runContainerCommand(() => container.stop());
+    }
+
+    async _runContainerCommand(callback) {
+        try {
+            await callback();
+        } catch (e) {
+            // Runtime already reports command errors and shows the user-facing notification.
+        } finally {
+            this._refresh();
+        }
     }
 
     _updateEyeButton() {
@@ -1346,9 +1346,9 @@ class ContainerActionMenu extends St.BoxLayout {
         const isHidden = this._opts.isHidden?.(this._container.id) ?? false;
 
         if (isRunning)
-            this._addAction("Pause", "media-playback-pause-symbolic", () => this._container.pause());
+            this._addAction("Pause", "media-playback-pause-symbolic", () => this._runCommand(() => this._container.pause()));
         if (isPaused)
-            this._addAction("Unpause", "media-playback-start-symbolic", () => this._container.unpause());
+            this._addAction("Unpause", "media-playback-start-symbolic", () => this._runCommand(() => this._container.unpause()));
 
         if (isRunning || isPaused)
             this._addSeparator();
@@ -1413,6 +1413,14 @@ class ContainerActionMenu extends St.BoxLayout {
 
     _addSeparator() {
         this.add_child(new St.Bin({style_class: "container-action-menu-separator"}));
+    }
+
+    async _runCommand(callback) {
+        try {
+            await callback();
+        } catch (e) {
+            // Runtime already reports command errors and shows the user-facing notification.
+        }
     }
 }
 
@@ -1799,7 +1807,9 @@ class RemoveContainerDialog extends ModalDialog.ModalDialog {
         this.addButton({
             action: () => {
                 this.close();
-                container.rm();
+                container.rm().catch(() => {
+                    // Runtime already reports command errors and shows the user-facing notification.
+                });
             },
             label: "Remove",
         });

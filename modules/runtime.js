@@ -115,12 +115,12 @@ class Container {
         }
     }
 
-    start()   { runCommand("start", this.name); }
-    stop()    { runCommand("stop", this.name); }
-    rm()      { runCommand("rm", this.name); }
-    restart() { runCommand("restart", this.name); }
-    pause()   { runCommand("pause", this.name); }
-    unpause() { runCommand("unpause", this.name); }
+    start()   { return runCommand("start", this.name); }
+    stop()    { return runCommand("stop", this.name); }
+    rm()      { return runCommand("rm", this.name); }
+    restart() { return runCommand("restart", this.name); }
+    pause()   { return runCommand("pause", this.name); }
+    unpause() { return runCommand("unpause", this.name); }
 
     logs() {
         const isRunning = this.state === "running" || this.state === "Up";
@@ -210,7 +210,7 @@ async function runCommand(command, containerName) {
     } catch (e) {
         const errMsg = `Error running ${command} on ${containerName}`;
         Main.notify(errMsg, e.message);
-        reportError(e, errMsg);
+        console.warn(`${errMsg}: ${e.message}`);
         throw e;
     }
 }

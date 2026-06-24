@@ -7,18 +7,14 @@ import {ExtensionPreferences, gettext as _} from "resource:///org/gnome/Shell/Ex
 const STATUS_FILTERS = ["all", "running", "stopped", "paused", "other"];
 
 function connectSettings(window, settings, signal, callback) {
-    const id = settings.connect(signal, callback);
-    window._settingsConnections.push(id);
-    return id;
+    settings.connectObject(signal, callback, window);
 }
 
 function disconnectSettings(window) {
-    if (!window._settings || !window._settingsConnections)
+    if (!window._settings)
         return;
 
-    for (const id of window._settingsConnections)
-        window._settings.disconnect(id);
-    window._settingsConnections = [];
+    window._settings.disconnectObject(window);
 }
 
 function addResetButton(window, row, settings, ...keys) {
@@ -91,12 +87,11 @@ function createShortcutRow(window, settings, key, title) {
 export default class ContainersManagerPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         window._settings = this.getSettings();
-        window._settingsConnections = [];
         window.search_enabled = true;
-        window.connect("close-request", () => {
+        window.connectObject("close-request", () => {
             disconnectSettings(window);
             return false;
-        });
+        }, window);
 
         const generalPage = new Adw.PreferencesPage({
             title: _("General"),
