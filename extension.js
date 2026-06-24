@@ -92,7 +92,7 @@ export default class ContainersManagerExtension extends Extension {
         this._stopSync();
         this._settings?.disconnectObject(this);
         this._indicator?.disconnectObject(this);
-        this._dialog?.cleanup();
+        this._dialog?.destroy();
         this._dialog = null;
         this._indicatorIcon?.destroy();
         this._indicatorCountLabel?.destroy();
@@ -531,12 +531,16 @@ class ContainerDialog extends St.Widget {
     }
 
     cleanup() {
+        this.destroy();
+    }
+
+    destroy() {
         if (this._open)
             this.close();
         this._cancelQueuedPositionBox();
         this._filterMenu?.destroy();
         this._filterMenu = null;
-        this.destroy();
+        super.destroy();
     }
 
     toggle() {
