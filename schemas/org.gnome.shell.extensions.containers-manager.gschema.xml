@@ -69,6 +69,11 @@
       <description>Whether only favorite containers are visible in the dialog</description>
     </key>
 
+    <key name="favorite-container-ids" type="as">
+      <default>[]</default>
+      <description>Container IDs marked as favorites by the user</description>
+    </key>
+
     <key name="show-hidden" type="b">
       <default>false</default>
       <description>Whether hidden containers are visible in the dialog</description>

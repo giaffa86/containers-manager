@@ -3,7 +3,9 @@
 import Clutter from "gi://Clutter";
 import GObject from "gi://GObject";
 import Gio from "gi://Gio";
+import GLib from "gi://GLib";
 import Meta from "gi://Meta";
+import Pango from "gi://Pango";
 import Shell from "gi://Shell";
 import St from "gi://St";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
@@ -14,6 +16,18 @@ import * as ModalDialog from "resource:///org/gnome/shell/ui/modalDialog.js";
 import {Extension} from "resource:///org/gnome/shell/extensions/extension.js";
 
 import * as Runtime from "./modules/runtime.js";
+
+function setAccessibleName(actor, name) {
+    if (typeof actor.set_accessible_name === "function")
+        actor.set_accessible_name(name);
+    else if ("accessible_name" in actor)
+        actor.accessible_name = name;
+}
+
+function ellipsizeLabel(label) {
+    label.clutter_text.line_wrap = false;
+    label.clutter_text.ellipsize = Pango.EllipsizeMode.END;
+}
 
 export default class ContainersManagerExtension extends Extension {
     enable() {
@@ -28,6 +42,7 @@ export default class ContainersManagerExtension extends Extension {
 
         Runtime.setRuntime(this._settings.get_string("container-runtime"));
         this._loadDialogStateFromSettings();
+        this._loadFavoriteStateFromSettings();
         this._loadHiddenStateFromSettings();
 
         this._dialog = new ContainerDialog(this);
@@ -132,6 +147,11 @@ export default class ContainersManagerExtension extends Extension {
             this._hiddenIds = new Set(this._settings.get_strv("hidden-container-ids"));
             this._dialog._applyFilters();
         }));
+        this._settingsConnections.push(this._settings.connect("changed::favorite-container-ids", () => {
+            this._loadFavoriteStateFromSettings();
+            this._dialog._refreshVisibleFavoriteState();
+            this._dialog._applyFilters();
+        }));
     }
 
     _addKeybinding() {
@@ -166,6 +186,10 @@ export default class ContainersManagerExtension extends Extension {
         this._searchText = remember ? this._settings.get_string("search-text").toLowerCase() : "";
     }
 
+    _loadFavoriteStateFromSettings() {
+        this._favoriteIds = new Set(this._settings.get_strv("favorite-container-ids"));
+    }
+
     _loadHiddenStateFromSettings() {
         this._showHidden = this._settings.get_boolean("show-hidden");
         this._hiddenIds = new Set(this._settings.get_strv("hidden-container-ids"));
@@ -184,6 +208,10 @@ export default class ContainersManagerExtension extends Extension {
     _persistHiddenState() {
         this._settings.set_boolean("show-hidden", this._showHidden);
         this._settings.set_strv("hidden-container-ids", [...this._hiddenIds]);
+    }
+
+    _persistFavoriteState() {
+        this._settings.set_strv("favorite-container-ids", [...this._favoriteIds]);
     }
 
     _resetTransientDialogState() {
@@ -291,6 +319,7 @@ class ContainerDialog extends St.Widget {
         this._grab = null;
         this._containerCards = new Map();
         this._renderRequestId = 0;
+        this._positionRequestId = 0;
         this._openMenuCard = null;
 
         Main.layoutManager.modalDialogGroup.add_child(this);
@@ -335,6 +364,7 @@ class ContainerDialog extends St.Widget {
                 style_class: "dialog-search-filter-content",
             }),
         });
+        setAccessibleName(this._filterToggleBtn, "Filter containers");
         this._filterToggleBtn.child.add_child(this._filterToggleIcon);
         this._filterToggleBtn.child.add_child(this._filterToggleArrow);
         this._filterToggleBtn.connect("clicked", () => this._toggleFilterMenu());
@@ -373,6 +403,7 @@ class ContainerDialog extends St.Widget {
             }),
         });
         this._searchFavoriteBtn = searchFavoriteBtn;
+        setAccessibleName(searchFavoriteBtn, "Show favorite containers only");
         searchFavoriteBtn.connect("clicked", () => {
             this._ext._favoritesOnly = searchFavoriteBtn.checked;
             this._ext._persistDialogState();
@@ -420,7 +451,6 @@ class ContainerDialog extends St.Widget {
 
         this._actionMenu = new ContainerActionMenu({
             onClose: () => this._closeContextMenu(),
-            onInspectCopied: (details) => this._showInspectDetails(details),
             isHidden: (containerId) => this._ext._hiddenIds.has(containerId),
             onToggleHidden: (container) => {
                 this._ext._toggleHidden(container.id);
@@ -433,49 +463,9 @@ class ContainerDialog extends St.Widget {
         });
         this.add_child(this._actionMenu);
 
-        this._inspectPanel = new St.BoxLayout({
-            vertical: true,
-            style_class: "dialog-inspect-panel",
-            x_expand: true,
-            visible: false,
-        });
-        const inspectHeader = new St.BoxLayout({
-            style_class: "dialog-inspect-header",
-            x_expand: true,
-        });
-        inspectHeader.add_child(new St.Icon({
-            icon_name: "edit-copy-symbolic",
-            icon_size: 14,
-            style_class: "dialog-inspect-icon",
-        }));
-        inspectHeader.add_child(new St.Label({
-            text: "Copied Inspect",
-            style_class: "dialog-inspect-title",
-            x_expand: true,
-            y_align: Clutter.ActorAlign.CENTER,
-        }));
-        const inspectCloseBtn = new St.Button({
-            style_class: "dialog-inspect-close-button",
-            can_focus: true,
-            child: new St.Icon({icon_name: "window-close-symbolic", icon_size: 14}),
-        });
-        inspectCloseBtn.connect("clicked", () => this._hideInspectDetails());
-        this._inspectCloseBtn = inspectCloseBtn;
-        inspectHeader.add_child(inspectCloseBtn);
-        this._inspectPanel.add_child(inspectHeader);
-
-        this._inspectText = new St.Label({
-            text: "",
-            style_class: "dialog-inspect-text",
-            x_expand: true,
-        });
-        this._inspectText.clutter_text.line_wrap = true;
-        this._inspectPanel.add_child(this._inspectText);
-        this._box.add_child(this._inspectPanel);
-
         // --- No containers fallback ---
         this._noContainersLabel = new St.Label({
-            text: "No containers detected",
+            text: "No containers found",
             style_class: "dialog-no-containers",
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
@@ -512,6 +502,7 @@ class ContainerDialog extends St.Widget {
             can_focus: true,
             child: this._eyeIcon,
         });
+        setAccessibleName(this._eyeBtn, "Show stopped containers");
         this._eyeBtn.connect("clicked", () => {
             this._ext._showStopped = !this._ext._showStopped;
             this._eyeBtn.checked = this._ext._showStopped;
@@ -552,6 +543,7 @@ class ContainerDialog extends St.Widget {
     destroy() {
         if (this._open)
             this.close();
+        this._cancelQueuedPositionBox();
         this._filterMenu?.destroy();
         this._filterMenu = null;
         super.destroy();
@@ -577,7 +569,6 @@ class ContainerDialog extends St.Widget {
         this._open = true;
         this._setFilterMenuOpen(false);
         this._closeContextMenu();
-        this._inspectPanel.visible = false;
         this._selectCard(null);
         if (!this._ext._settings.get_boolean("remember-dialog-state"))
             this._ext._resetTransientDialogState();
@@ -597,8 +588,8 @@ class ContainerDialog extends St.Widget {
         this._open = false;
         this._setFilterMenuOpen(false);
         this._closeContextMenu();
-        this._inspectPanel.visible = false;
         this._scrollView.set_height(0);
+        this._cancelQueuedPositionBox();
 
         Main.popModal(this._grab);
         this._grab = null;
@@ -620,7 +611,7 @@ class ContainerDialog extends St.Widget {
             this._cardList.destroy_all_children();
             this._containerCards.clear();
             this._scrollView.visible = false;
-            this._noContainersLabel.text = `Error: ${err.message}`;
+            this._noContainersLabel.text = `Unable to load containers: ${err.message}`;
             this._noContainersLabel.visible = true;
             this._positionBox();
         });
@@ -639,6 +630,16 @@ class ContainerDialog extends St.Widget {
         }
         if (hiddenChanged)
             this._ext._persistHiddenState();
+
+        let favoritesChanged = false;
+        for (const id of this._ext._favoriteIds) {
+            if (!currentIds.has(id)) {
+                this._ext._favoriteIds.delete(id);
+                favoritesChanged = true;
+            }
+        }
+        if (favoritesChanged)
+            this._ext._persistFavoriteState();
 
         if (this._ext._selectedContainerId && !currentIds.has(this._ext._selectedContainerId))
             this._ext._selectedContainerId = null;
@@ -680,6 +681,7 @@ class ContainerDialog extends St.Widget {
                         else
                             this._ext._favoriteIds.add(id);
                         const favorite = this._ext._favoriteIds.has(id);
+                        this._ext._persistFavoriteState();
                         this._renderContainers([...this._containerCards.values()].map(card => card._container));
                         return favorite;
                     },
@@ -698,6 +700,11 @@ class ContainerDialog extends St.Widget {
         this._applyFilters();
         this._syncSelectionActions();
         this._positionBox();
+    }
+
+    _refreshVisibleFavoriteState() {
+        for (const [, card] of this._containerCards)
+            card.setFavorite(this._ext._favoriteIds.has(card._container.id));
     }
 
     _applyFilters() {
@@ -732,12 +739,12 @@ class ContainerDialog extends St.Widget {
         const hasContainers = this._containerCards.size > 0;
         this._scrollView.visible = hasContainers && visibleCount > 0;
         this._noContainersLabel.text = hasContainers
-            ? "No containers match filters"
-            : "No containers detected";
+            ? "No matching containers"
+            : "No containers found";
         this._noContainersLabel.visible = !hasContainers || visibleCount === 0;
 
         if (this._open)
-            this._positionBox();
+            this._queuePositionBox();
     }
 
     _addFilterOption(value, label, iconName) {
@@ -747,6 +754,7 @@ class ContainerDialog extends St.Widget {
             x_expand: true,
             can_focus: true,
         });
+        setAccessibleName(btn, label);
         const row = new St.BoxLayout({style_class: "dialog-filter-option-row"});
         row.add_child(new St.Icon({icon_name: iconName, icon_size: 14, style_class: "popup-menu-icon"}));
         row.add_child(new St.Label({
@@ -782,6 +790,7 @@ class ContainerDialog extends St.Widget {
             x_expand: true,
             can_focus: true,
         });
+        setAccessibleName(btn, "Show hidden containers");
         const row = new St.BoxLayout({style_class: "dialog-filter-option-row"});
         row.add_child(new St.Icon({icon_name: "view-reveal-symbolic", icon_size: 14, style_class: "popup-menu-icon"}));
         row.add_child(new St.Label({
@@ -863,6 +872,8 @@ class ContainerDialog extends St.Widget {
             can_focus: true,
             child: new St.Icon({icon_name: iconName, icon_size: 16}),
         });
+        if (iconName === "emblem-system-symbolic")
+            setAccessibleName(btn, "Open preferences");
         btn.connect("clicked", callback);
         return btn;
     }
@@ -905,7 +916,11 @@ class ContainerDialog extends St.Widget {
         this._toggleRunActionIcon.icon_name = canStop
             ? "media-playback-stop-symbolic"
             : "media-playback-start-symbolic";
+        setAccessibleName(this._toggleRunActionBtn, canStop
+            ? "Stop selected container"
+            : "Start selected container");
         this._setActionButtonEnabled(this._toggleRunActionBtn, canStart || canStop);
+        setAccessibleName(this._restartActionBtn, "Restart selected container");
         this._setActionButtonEnabled(this._restartActionBtn, category === "running" || category === "paused");
     }
 
@@ -945,24 +960,17 @@ class ContainerDialog extends St.Widget {
             container.stop();
     }
 
-    _showInspectDetails(details) {
-        this._inspectText.text = details;
-        this._inspectPanel.visible = true;
-        this._positionBox();
-    }
-
-    _hideInspectDetails() {
-        this._inspectPanel.visible = false;
-        this._positionBox();
-    }
-
     _updateEyeButton() {
         this._eyeIcon.icon_name = this._ext._showStopped
             ? "view-reveal-symbolic"
             : "view-conceal-symbolic";
+        setAccessibleName(this._eyeBtn, this._ext._showStopped
+            ? "Hide stopped containers"
+            : "Show stopped containers");
     }
 
     _positionBox() {
+        this._cancelQueuedPositionBox();
         const indicator = this._ext._indicator;
         const [indicatorX, indicatorY] = indicator.get_transformed_position();
         const [indicatorWidth, indicatorHeight] = indicator.get_transformed_size();
@@ -980,9 +988,9 @@ class ContainerDialog extends St.Widget {
         const [, boxNaturalHeight] = this._box.get_preferred_height(boxWidth);
         const [, scrollMinHeight] = this._scrollView.get_preferred_height(boxWidth);
         const chromeHeight = Math.max(0, boxNaturalHeight - scrollMinHeight);
-        const maxScrollHeight = Math.max(180, availableHeight - chromeHeight);
+        const maxScrollHeight = Math.max(96, availableHeight - chromeHeight);
         const preferredScrollHeight = Math.min(420, maxScrollHeight);
-        const scrollHeight = Math.max(240, preferredScrollHeight);
+        const scrollHeight = Math.max(Math.min(180, maxScrollHeight), preferredScrollHeight);
         this._scrollView.set_height(Math.floor(scrollHeight));
 
         const [, boxHeight] = this._box.get_preferred_height(boxWidth);
@@ -998,6 +1006,26 @@ class ContainerDialog extends St.Widget {
         this._box.set_position(Math.round(x), Math.round(y));
         if (this._filterMenu.visible)
             this._positionFilterMenu();
+    }
+
+    _queuePositionBox() {
+        if (this._positionRequestId)
+            return;
+
+        this._positionRequestId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+            this._positionRequestId = 0;
+            if (this._open)
+                this._positionBox();
+            return GLib.SOURCE_REMOVE;
+        });
+    }
+
+    _cancelQueuedPositionBox() {
+        if (!this._positionRequestId)
+            return;
+
+        GLib.source_remove(this._positionRequestId);
+        this._positionRequestId = 0;
     }
 
     _positionFilterMenu() {
@@ -1200,9 +1228,6 @@ class ContainerDialog extends St.Widget {
             actors.push(card, ...card.focusableControls);
         }
 
-        if (this._inspectPanel.visible)
-            actors.push(this._inspectCloseBtn);
-
         actors.push(this._settingsBtn, this._eyeBtn, this._toggleRunActionBtn, this._restartActionBtn);
 
         return actors.filter(actor =>
@@ -1342,17 +1367,15 @@ class ContainerActionMenu extends St.BoxLayout {
         this._addAction("Open Shell", "utilities-terminal-symbolic", () => this._container.shell());
         this._addAction("Live Stats", "utilities-system-monitor-symbolic", () => this._container.stats());
         this._addAction("Show Logs", "text-x-generic-symbolic", () => this._container.logs());
-        this._addAction("Copy Inspect", "edit-copy-symbolic", async () => {
+        this._addAction("Copy inspect data", "edit-copy-symbolic", async () => {
             try {
                 const details = await this._container.details();
                 const clipboard = St.Clipboard.get_default();
                 clipboard.set_text(St.ClipboardType.CLIPBOARD, details);
                 clipboard.set_text(St.ClipboardType.PRIMARY, details);
-                if (this._opts.onInspectCopied)
-                    this._opts.onInspectCopied(details);
-                Main.notify("Container details copied");
+                Main.notify("Inspect data copied");
             } catch (e) {
-                Main.notify("Unable to copy container details", e.message);
+                Main.notify("Unable to copy inspect data", e.message);
             }
         });
 
@@ -1371,6 +1394,7 @@ class ContainerActionMenu extends St.BoxLayout {
             x_expand: true,
             can_focus: true,
         });
+        setAccessibleName(btn, label);
         const row = new St.BoxLayout({style_class: "container-action-menu-row"});
         row.add_child(new St.Icon({icon_name: iconName, icon_size: 14, style_class: "popup-menu-icon"}));
         row.add_child(new St.Label({
@@ -1435,7 +1459,7 @@ class ContainerCard extends St.BoxLayout {
         });
 
         // --- Preview Header ---
-        const topRow = new St.BoxLayout({style_class: "card-top-row"});
+        const topRow = new St.BoxLayout({style_class: "card-top-row", x_expand: true});
 
         this._statusIcon = new St.Icon({
             icon_name: "action-unavailable-symbolic",
@@ -1448,7 +1472,9 @@ class ContainerCard extends St.BoxLayout {
             text: container.name,
             style_class: "card-name",
             y_align: Clutter.ActorAlign.CENTER,
+            x_expand: true,
         });
+        ellipsizeLabel(this._nameLabel);
         topRow.add_child(this._nameLabel);
         preview.add_child(topRow);
 
@@ -1456,7 +1482,9 @@ class ContainerCard extends St.BoxLayout {
         this._imageLabel = new St.Label({
             text: container.image || "",
             style_class: "card-subtitle",
+            x_expand: true,
         });
+        ellipsizeLabel(this._imageLabel);
         preview.add_child(this._imageLabel);
 
         // Action buttons
@@ -1473,6 +1501,7 @@ class ContainerCard extends St.BoxLayout {
             y_expand: false,
             child: new St.Icon({icon_name: "user-trash-symbolic", icon_size: 14}),
         });
+        setAccessibleName(this._deleteBtn, `Remove ${container.name}`);
         this._deleteBtn.connect("clicked", () => {
             this._select();
             if (this._opts.onDelete)
@@ -1491,10 +1520,11 @@ class ContainerCard extends St.BoxLayout {
             y_expand: false,
             child: new St.Icon({icon_name: "starred-symbolic", icon_size: 14}),
         });
+        setAccessibleName(this._favoriteBtn, `Add ${container.name} to favorites`);
         this._favoriteBtn.connect("clicked", () => {
             this._select();
             if (this._opts.onToggleFavorite)
-                this._favoriteBtn.checked = this._opts.onToggleFavorite(this._container.id);
+                this.setFavorite(this._opts.onToggleFavorite(this._container.id));
         });
         this._favoriteBtn.connect("key-focus-in", () => this._select());
         this._favoriteBtn.connect("key-press-event", (_actor, event) => this._handleKeyPress(event));
@@ -1507,6 +1537,7 @@ class ContainerCard extends St.BoxLayout {
             y_expand: false,
             child: new St.Icon({icon_name: "view-more-symbolic", icon_size: 14}),
         });
+        setAccessibleName(this._kebabBtn, `More actions for ${container.name}`);
         this._kebabBtn.connect("clicked", () => {
             this._select();
             if (this._opts.onOpenMenu)
@@ -1534,7 +1565,9 @@ class ContainerCard extends St.BoxLayout {
         this._statusLabel = new St.Label({
             style_class: "card-meta-item",
             y_align: Clutter.ActorAlign.CENTER,
+            x_expand: true,
         });
+        ellipsizeLabel(this._statusLabel);
         metaRow.add_child(this._statusLabel);
 
         const metaSpacer = new St.Bin({x_expand: true});
@@ -1552,6 +1585,7 @@ class ContainerCard extends St.BoxLayout {
             style_class: "card-meta-item card-meta-right",
             y_align: Clutter.ActorAlign.CENTER,
         });
+        ellipsizeLabel(this._createdLabel);
         this._createdBin.child = this._createdLabel;
         metaRow.add_child(this._createdBin);
 
@@ -1618,10 +1652,19 @@ class ContainerCard extends St.BoxLayout {
 
     update(container, favorite, hidden, selected) {
         this._container = container;
-        this._favoriteBtn.checked = favorite;
+        this.setFavorite(favorite);
         this._hidden = hidden;
         this._selected = selected;
         this._updateFromContainer(container);
+    }
+
+    setFavorite(favorite) {
+        this._favoriteBtn.checked = favorite;
+        if (this._container) {
+            setAccessibleName(this._favoriteBtn, favorite
+                ? `Remove ${this._container.name} from favorites`
+                : `Add ${this._container.name} to favorites`);
+        }
     }
 
     setSelected(selected) {
@@ -1644,6 +1687,7 @@ class ContainerCard extends St.BoxLayout {
 
         this._nameLabel.text = container.name;
         this._imageLabel.text = container.image || "";
+        setAccessibleName(this, `${container.name}, ${container.status}`);
 
         const category = statusCategory(container.status);
         let iconName, styleClass, cardClass;
@@ -1675,6 +1719,11 @@ class ContainerCard extends St.BoxLayout {
         this._statusIcon.icon_name = iconName;
         this._statusIcon.style_class = `card-status-icon ${styleClass}`;
         this._statusLabel.text = container.status;
+        setAccessibleName(this._deleteBtn, `Remove ${container.name}`);
+        setAccessibleName(this._favoriteBtn, this._favoriteBtn.checked
+            ? `Remove ${container.name} from favorites`
+            : `Add ${container.name} to favorites`);
+        setAccessibleName(this._kebabBtn, `More actions for ${container.name}`);
 
         if (container.createdAt) {
             try {
