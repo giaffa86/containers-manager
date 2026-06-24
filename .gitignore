@@ -3,6 +3,9 @@ private/
 .agents/
 .codex/
 .claude/
+.impeccable/
+PRODUCT.md
+DESIGN.md
 
 # Generated extension bundles
 *.shell-extension.zip

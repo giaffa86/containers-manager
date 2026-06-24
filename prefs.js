@@ -6,7 +6,22 @@ import {ExtensionPreferences, gettext as _} from "resource:///org/gnome/Shell/Ex
 
 const STATUS_FILTERS = ["all", "running", "stopped", "paused", "other"];
 
-function addResetButton(row, settings, ...keys) {
+function connectSettings(window, settings, signal, callback) {
+    const id = settings.connect(signal, callback);
+    window._settingsConnections.push(id);
+    return id;
+}
+
+function disconnectSettings(window) {
+    if (!window._settings || !window._settingsConnections)
+        return;
+
+    for (const id of window._settingsConnections)
+        window._settings.disconnect(id);
+    window._settingsConnections = [];
+}
+
+function addResetButton(window, row, settings, ...keys) {
     const button = new Gtk.Button({
         icon_name: "edit-undo-symbolic",
         valign: Gtk.Align.CENTER,
@@ -24,13 +39,13 @@ function addResetButton(row, settings, ...keys) {
     });
 
     for (const key of keys)
-        settings.connect(`changed::${key}`, updateSensitive);
+        connectSettings(window, settings, `changed::${key}`, updateSensitive);
 
     row.add_suffix(button);
     updateSensitive();
 }
 
-function createComboRow(settings, key, title, values, labels = values) {
+function createComboRow(window, settings, key, title, values, labels = values) {
     const model = new Gtk.StringList({strings: labels});
     const row = new Adw.ComboRow({title, model});
 
@@ -45,13 +60,13 @@ function createComboRow(settings, key, title, values, labels = values) {
         if (selected >= 0 && selected < values.length)
             settings.set_string(key, values[selected]);
     });
-    settings.connect(`changed::${key}`, syncFromSettings);
+    connectSettings(window, settings, `changed::${key}`, syncFromSettings);
 
-    addResetButton(row, settings, key);
+    addResetButton(window, row, settings, key);
     return row;
 }
 
-function createShortcutRow(settings, key, title) {
+function createShortcutRow(window, settings, key, title) {
     const row = new Adw.EntryRow({
         title,
         show_apply_button: true,
@@ -67,16 +82,21 @@ function createShortcutRow(settings, key, title) {
         const text = row.text.trim();
         settings.set_strv(key, text ? [text] : []);
     });
-    settings.connect(`changed::${key}`, syncFromSettings);
+    connectSettings(window, settings, `changed::${key}`, syncFromSettings);
 
-    addResetButton(row, settings, key);
+    addResetButton(window, row, settings, key);
     return row;
 }
 
 export default class ContainersManagerPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         window._settings = this.getSettings();
+        window._settingsConnections = [];
         window.search_enabled = true;
+        window.connect("close-request", () => {
+            disconnectSettings(window);
+            return false;
+        });
 
         const generalPage = new Adw.PreferencesPage({
             title: _("General"),
@@ -91,6 +111,7 @@ export default class ContainersManagerPreferences extends ExtensionPreferences {
         generalPage.add(runtimeGroup);
 
         runtimeGroup.add(createComboRow(
+            window,
             window._settings,
             "container-runtime",
             _("Runtime"),
@@ -104,6 +125,7 @@ export default class ContainersManagerPreferences extends ExtensionPreferences {
         generalPage.add(behaviourGroup);
 
         behaviourGroup.add(createComboRow(
+            window,
             window._settings,
             "default-status-filter",
             _("Default status filter"),
@@ -117,7 +139,7 @@ export default class ContainersManagerPreferences extends ExtensionPreferences {
         });
         behaviourGroup.add(rememberStateRow);
         window._settings.bind("remember-dialog-state", rememberStateRow, "active", Gio.SettingsBindFlags.DEFAULT);
-        addResetButton(rememberStateRow, window._settings, "remember-dialog-state");
+        addResetButton(window, rememberStateRow, window._settings, "remember-dialog-state");
 
         const terminalGroup = new Adw.PreferencesGroup({
             title: _("Terminal"),
@@ -131,7 +153,7 @@ export default class ContainersManagerPreferences extends ExtensionPreferences {
         });
         terminalGroup.add(terminalRow);
         window._settings.bind("terminal", terminalRow, "text", Gio.SettingsBindFlags.DEFAULT);
-        addResetButton(terminalRow, window._settings, "terminal");
+        addResetButton(window, terminalRow, window._settings, "terminal");
 
         const appearancePage = new Adw.PreferencesPage({
             title: _("Appearance"),
@@ -146,6 +168,7 @@ export default class ContainersManagerPreferences extends ExtensionPreferences {
         appearancePage.add(indicatorGroup);
 
         indicatorGroup.add(createComboRow(
+            window,
             window._settings,
             "indicator-display",
             _("Indicator display"),
@@ -160,6 +183,7 @@ export default class ContainersManagerPreferences extends ExtensionPreferences {
         appearancePage.add(containerListGroup);
 
         containerListGroup.add(createComboRow(
+            window,
             window._settings,
             "sort-by",
             _("Sort containers by"),
@@ -178,6 +202,7 @@ export default class ContainersManagerPreferences extends ExtensionPreferences {
         });
         shortcutsPage.add(dialogShortcutsGroup);
         dialogShortcutsGroup.add(createShortcutRow(
+            window,
             window._settings,
             "open-dialog-shortcut",
             _("Open or close dialog")

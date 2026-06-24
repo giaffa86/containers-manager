@@ -8,13 +8,16 @@ TARGET_DIR="${HOME}/.local/share/gnome-shell/extensions/${UUID}"
 
 mkdir -p "${TARGET_DIR}"
 
-rsync -av --delete \
+rsync -av --delete --delete-excluded \
   --exclude='.git' \
   --exclude='.gitignore' \
   --exclude='*.md' \
+  --exclude='*.sh' \
+  --exclude='scripts' \
   --exclude='private' \
   --exclude='.agents' \
   --exclude='.codex' \
+  --exclude='.claude' \
   "${SOURCE_DIR}/" \
   "${TARGET_DIR}/"
 

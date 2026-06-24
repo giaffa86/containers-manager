@@ -34,7 +34,7 @@
 
 .dialog-search-row.focused {
     border-color: -st-accent-color;
-    box-shadow: none;
+    box-shadow: inset 0 0 0 1px rgba(119, 168, 232, 0.58);
 }
 
 .dialog-search-entry {
@@ -67,8 +67,8 @@
 }
 
 .dialog-search-button {
-    min-width: 30px;
-    min-height: 30px;
+    min-width: 34px;
+    min-height: 34px;
     border-radius: 999px;
     background: transparent;
     border: 1px solid transparent;
@@ -77,7 +77,7 @@
 }
 
 .dialog-search-filter-button {
-    min-width: 50px;
+    min-width: 54px;
 }
 
 .dialog-search-button:hover {
@@ -87,15 +87,15 @@
 
 .dialog-search-button:focus {
     background-color: rgba(255, 255, 255, 0.12);
-    border-color: transparent;
-    box-shadow: none;
+    border-color: -st-accent-color;
+    box-shadow: inset 0 0 0 1px rgba(119, 168, 232, 0.58);
     color: inherit;
 }
 
 .dialog-search-button.dialog-search-filter-button:focus {
     background-color: rgba(255, 255, 255, 0.12);
-    border-color: transparent;
-    box-shadow: none;
+    border-color: -st-accent-color;
+    box-shadow: inset 0 0 0 1px rgba(119, 168, 232, 0.58);
     color: inherit;
 }
 
@@ -113,13 +113,13 @@
 }
 
 .dialog-search-button:checked:focus {
-    border-color: transparent;
-    box-shadow: none;
+    border-color: rgba(255, 255, 255, 0.72);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
 }
 
 .dialog-search-button.dialog-search-filter-button.open {
     background-color: rgba(255, 255, 255, 0.16);
-    border-color: transparent;
+    border-color: rgba(255, 255, 255, 0.18);
     box-shadow: none;
     color: inherit;
 }
@@ -127,8 +127,8 @@
 .dialog-search-button.dialog-search-filter-button.open:hover,
 .dialog-search-button.dialog-search-filter-button.open:focus {
     background-color: rgba(255, 255, 255, 0.20);
-    border-color: transparent;
-    box-shadow: none;
+    border-color: -st-accent-color;
+    box-shadow: inset 0 0 0 1px rgba(119, 168, 232, 0.58);
     color: inherit;
 }
 
@@ -162,7 +162,7 @@
     border: 1px solid transparent;
     border-radius: 10px;
     padding: 5px 9px;
-    min-height: 30px;
+    min-height: 34px;
     text-align: left;
     color: inherit;
 }
@@ -183,14 +183,14 @@
 
 .dialog-filter-option:focus {
     background-color: rgba(255, 255, 255, 0.12);
-    border-color: transparent;
-    box-shadow: none;
+    border-color: -st-accent-color;
+    box-shadow: inset 0 0 0 1px rgba(119, 168, 232, 0.58);
 }
 
 .dialog-filter-option:checked:focus {
     background-color: -st-accent-color;
-    border-color: transparent;
-    box-shadow: none;
+    border-color: rgba(255, 255, 255, 0.72);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
 }
 
 .dialog-filter-option-row {
@@ -353,12 +353,12 @@
 }
 
 .card-icon-button {
-    width: 28px;
-    height: 28px;
-    min-width: 28px;
-    min-height: 28px;
-    max-width: 28px;
-    max-height: 28px;
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    min-height: 34px;
+    max-width: 34px;
+    max-height: 34px;
     border-radius: 999px;
     border: 1px solid transparent;
     background-color: transparent;
@@ -372,8 +372,8 @@
 
 .card-icon-button:focus {
     background-color: rgba(255, 255, 255, 0.16);
-    border-color: transparent;
-    box-shadow: none;
+    border-color: -st-accent-color;
+    box-shadow: inset 0 0 0 1px rgba(119, 168, 232, 0.58);
     color: rgba(255, 255, 255, 1.0);
 }
 
@@ -393,8 +393,8 @@
 
 .card-favorite-button:checked:focus {
     background-color: -st-accent-color;
-    border-color: transparent;
-    box-shadow: none;
+    border-color: rgba(255, 255, 255, 0.72);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
     color: -st-accent-fg-color;
 }
 
@@ -437,7 +437,7 @@
     border: 1px solid transparent;
     border-radius: 10px;
     padding: 5px 9px;
-    min-height: 30px;
+    min-height: 34px;
     text-align: left;
     color: inherit;
 }
@@ -448,8 +448,8 @@
 
 .container-action-menu-item:focus {
     background-color: rgba(255, 255, 255, 0.12);
-    border-color: transparent;
-    box-shadow: none;
+    border-color: -st-accent-color;
+    box-shadow: inset 0 0 0 1px rgba(119, 168, 232, 0.58);
 }
 
 .container-action-menu-item:active {
@@ -488,64 +488,14 @@
     padding: 24px;
 }
 
-.dialog-inspect-panel {
-    margin: 2px 8px 8px 8px;
-    padding: 8px 10px;
-    spacing: 6px;
-    border-radius: 14px;
-    background-color: rgba(255, 255, 255, 0.055);
-    border: 1px solid rgba(255, 255, 255, 0.10);
-    color: inherit;
-}
-
-.dialog-inspect-header {
-    spacing: 8px;
-}
-
-.dialog-inspect-icon {
-    color: inherit;
-    opacity: 0.82;
-}
-
-.dialog-inspect-title {
-    font-size: 9.5pt;
-    font-weight: 700;
-    color: inherit;
-}
-
-.dialog-inspect-close-button {
-    min-width: 24px;
-    min-height: 24px;
-    border-radius: 999px;
-    background-color: transparent;
-    border: 1px solid transparent;
-    color: inherit;
-    padding: 0;
-}
-
-.dialog-inspect-close-button:hover,
-.dialog-inspect-close-button:focus {
-    background-color: rgba(255, 255, 255, 0.12);
-    border-color: transparent;
-    box-shadow: none;
-}
-
-.dialog-inspect-text {
-    font-family: monospace;
-    font-size: 8.5pt;
-    color: inherit;
-    opacity: 0.78;
-    max-height: 9em;
-}
-
 .dialog-toolbar {
     spacing: 7px;
     padding: 3px 8px 0 8px;
 }
 
 .dialog-toolbar-button {
-    min-width: 30px;
-    min-height: 30px;
+    min-width: 34px;
+    min-height: 34px;
     border: 1px solid transparent;
     border-radius: 999px;
     background-color: rgba(255, 255, 255, 0.07);
@@ -559,8 +509,8 @@
 
 .dialog-toolbar-button:focus {
     background-color: rgba(255, 255, 255, 0.16);
-    border-color: transparent;
-    box-shadow: none;
+    border-color: -st-accent-color;
+    box-shadow: inset 0 0 0 1px rgba(119, 168, 232, 0.58);
     color: inherit;
 }
 
@@ -575,11 +525,11 @@
 
 .dialog-toolbar-button:checked:focus {
     background-color: -st-accent-color;
-    border-color: transparent;
-    box-shadow: none;
+    border-color: rgba(255, 255, 255, 0.72);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45);
     color: -st-accent-fg-color;
 }
 
 .dialog-toolbar-action {
-    min-width: 30px;
+    min-width: 34px;
 }
