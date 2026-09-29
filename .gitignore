@@ -21,3 +21,6 @@ DESIGN.md
 # Local runtime artifacts
 core
 core.*
+
+# Serena editor state
+.serena/
