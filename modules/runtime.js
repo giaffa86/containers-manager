@@ -341,7 +341,10 @@ export async function newEventsProcess(onEvent) {
 
 async function _readStream(inputStream, onEvent, cancellable) {
     const decoder = new TextDecoder();
-    let buffer = "";
+    // GJS TextDecoder has no streaming mode, so buffer raw bytes and only
+    // decode up to each newline. A newline byte cannot occur inside a
+    // multi-byte UTF-8 sequence, so every decoded line is complete.
+    let pending = new Uint8Array(0);
 
     while (true) {
         let result;
@@ -354,18 +357,26 @@ async function _readStream(inputStream, onEvent, cancellable) {
         if (result.get_size() === 0)
             break;
 
-        buffer += decoder.decode(result.toArray(), {stream: true});
-        const lines = buffer.split("\n");
-        // A read can end mid-line; keep the tail for the next chunk.
-        buffer = lines.pop();
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (trimmed !== "")
-                onEvent(trimmed);
+        const chunk = result.toArray();
+        const merged = new Uint8Array(pending.length + chunk.length);
+        merged.set(pending, 0);
+        merged.set(chunk, pending.length);
+
+        let lineStart = 0;
+        for (let i = 0; i < merged.length; i++) {
+            if (merged[i] !== 0x0A)
+                continue;
+
+            const line = decoder.decode(merged.subarray(lineStart, i)).trim();
+            if (line !== "")
+                onEvent(line);
+            lineStart = i + 1;
         }
+        // A read can end mid-line; keep the tail bytes for the next chunk.
+        pending = merged.subarray(lineStart);
     }
 
-    const tail = buffer.trim();
+    const tail = decoder.decode(pending).trim();
     if (tail !== "")
         onEvent(tail);
 }
