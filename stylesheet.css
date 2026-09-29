@@ -225,11 +225,6 @@
     border-radius: 0;
 }
 
-.dialog-scroll-view-collapsed {
-    min-height: 0;
-    max-height: 0;
-    height: 0;
-}
 
 .dialog-card-list {
     spacing: 5px;
@@ -297,17 +292,6 @@
     spacing: 1px;
 }
 
-.dialog-card.status-running-card .card-preview {
-    background-color: transparent;
-}
-
-.dialog-card.status-stopped-card .card-preview {
-    background-color: transparent;
-}
-
-.dialog-card.status-paused-card .card-preview {
-    background-color: transparent;
-}
 
 .card-top-row {
     spacing: 6px;

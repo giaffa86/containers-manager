@@ -2,11 +2,25 @@
 <schemalist>
   <schema id="org.gnome.shell.extensions.containers-manager" path="/org/gnome/shell/extensions/containers-manager/">
     <key name="container-runtime" type="s">
+      <choices>
+        <choice value="podman"/>
+        <choice value="docker"/>
+      </choices>
       <default>"podman"</default>
       <description>The container runtime to use (podman or docker)</description>
     </key>
 
     <key name="sort-by" type="s">
+      <choices>
+        <choice value="command"/>
+        <choice value="created"/>
+        <choice value="id"/>
+        <choice value="image"/>
+        <choice value="names"/>
+        <choice value="runningfor"/>
+        <choice value="size"/>
+        <choice value="status"/>
+      </choices>
       <default>"created"</default>
       <description>Sort containers by this field</description>
     </key>

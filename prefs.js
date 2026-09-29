@@ -6,15 +6,8 @@ import {ExtensionPreferences, gettext as _} from "resource:///org/gnome/Shell/Ex
 
 const STATUS_FILTERS = ["all", "running", "stopped", "paused", "other"];
 
-function connectSettings(window, settings, signal, callback) {
-    settings.connectObject(signal, callback, window);
-}
-
-function disconnectSettings(window) {
-    if (!window._settings)
-        return;
-
-    window._settings.disconnectObject(window);
+function connectSetting(window, settings, signal, callback) {
+    window._settingsHandlers.push(settings.connect(signal, callback));
 }
 
 function addResetButton(window, row, settings, ...keys) {
@@ -35,7 +28,7 @@ function addResetButton(window, row, settings, ...keys) {
     });
 
     for (const key of keys)
-        connectSettings(window, settings, `changed::${key}`, updateSensitive);
+        connectSetting(window, settings, `changed::${key}`, updateSensitive);
 
     row.add_suffix(button);
     updateSensitive();
@@ -56,7 +49,7 @@ function createComboRow(window, settings, key, title, values, labels = values) {
         if (selected >= 0 && selected < values.length)
             settings.set_string(key, values[selected]);
     });
-    connectSettings(window, settings, `changed::${key}`, syncFromSettings);
+    connectSetting(window, settings, `changed::${key}`, syncFromSettings);
 
     addResetButton(window, row, settings, key);
     return row;
@@ -78,7 +71,7 @@ function createShortcutRow(window, settings, key, title) {
         const text = row.text.trim();
         settings.set_strv(key, text ? [text] : []);
     });
-    connectSettings(window, settings, `changed::${key}`, syncFromSettings);
+    connectSetting(window, settings, `changed::${key}`, syncFromSettings);
 
     addResetButton(window, row, settings, key);
     return row;
@@ -87,11 +80,14 @@ function createShortcutRow(window, settings, key, title) {
 export default class ContainersManagerPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         window._settings = this.getSettings();
+        window._settingsHandlers = [];
         window.search_enabled = true;
-        window.connectObject("close-request", () => {
-            disconnectSettings(window);
+        window.connect("close-request", () => {
+            for (const id of window._settingsHandlers)
+                window._settings.disconnect(id);
+            window._settingsHandlers = [];
             return false;
-        }, window);
+        });
 
         const generalPage = new Adw.PreferencesPage({
             title: _("General"),

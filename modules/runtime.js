@@ -4,8 +4,7 @@ import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
-const TERM_KEEP_ON_EXIT = true;
-const TERM_CLOSE_ON_EXIT = false;
+// Terminals probed in order when the configured terminal is not installed.
 const TERMINAL_FALLBACKS = ["ptyxis --", "kgx --", "gnome-terminal --", "xterm -e"];
 
 Gio._promisify(Gio.Subprocess.prototype,
@@ -13,68 +12,118 @@ Gio._promisify(Gio.Subprocess.prototype,
 Gio._promisify(Gio.InputStream.prototype,
     "read_bytes_async", "read_bytes_finish");
 
+// Per-runtime state. Keeping command and version together means a runtime
+// switch cannot leak a Podman version or parser choice into a Docker request.
+const runtimeStates = new Map();
 let runtimeCmd;
-let runtimeVersion;
-let discoveringRuntimeVersion = null;
 
-function reportError(error, message) {
-    logError(error, message);
+function getRuntimeState(cmd) {
+    let state = runtimeStates.get(cmd);
+    if (!state) {
+        state = {cmd, version: undefined, discovery: null};
+        runtimeStates.set(cmd, state);
+    }
+    return state;
 }
 
 export function setRuntime(cmd) {
     runtimeCmd = cmd;
-    runtimeVersion = undefined;
-    discoveringRuntimeVersion = null;
 }
 
-export function getRuntime() {
-    return runtimeCmd || "podman";
-}
-
-async function discoverRuntimeVersion() {
+async function discoverRuntimeVersion(state) {
     try {
-        const out = await spawnCommandline(`${runtimeCmd} version --format json`);
+        const out = await spawnCommandline(`${state.cmd} version --format json`);
         const versionJson = JSON.parse(out);
         const versionString = versionJson?.Client?.Version;
-        if (versionString) {
-            runtimeVersion = new Version(versionString);
-        }
+        if (versionString)
+            state.version = new Version(versionString);
     } catch (e) {
-        reportError(e, `Error getting ${runtimeCmd} version`);
+        logError(e, `Error getting ${state.cmd} version`);
     }
+}
+
+async function ensureRuntimeVersion(state) {
+    if (state.version !== undefined)
+        return;
+
+    if (!state.discovery)
+        state.discovery = discoverRuntimeVersion(state);
+    await state.discovery;
 }
 
 export async function getContainers(settings) {
-    if (runtimeVersion === undefined) {
-        if (!discoveringRuntimeVersion) {
-            discoveringRuntimeVersion = discoverRuntimeVersion();
-        }
-        await discoveringRuntimeVersion;
-    }
+    const state = getRuntimeState(runtimeCmd);
+    await ensureRuntimeVersion(state);
 
     const sortBy = settings.get_string("sort-by");
-    let jsonContainers;
+    const isDocker = state.cmd === "docker";
+    // Genuine Docker has no `--sort` flag and emits one JSON object per line.
+    const cmdline = isDocker
+        ? `${state.cmd} ps -a --format json`
+        : `${state.cmd} ps -a --sort ${sortBy} --format json`;
 
+    let rows;
     try {
-        const out = await spawnCommandline(`${runtimeCmd} ps -a --sort ${sortBy} --format json`);
-        jsonContainers = JSON.parse(out);
+        const out = await spawnCommandline(cmdline);
+        rows = parseContainerRows(out);
     } catch (e) {
-        reportError(e, `Error fetching containers from ${runtimeCmd}`);
-        throw new Error(`Error fetching containers from ${runtimeCmd}`);
+        logError(e, `Error fetching containers from ${state.cmd}`);
+        throw e;
     }
 
-    if (jsonContainers === null || !Array.isArray(jsonContainers)) {
+    const containers = rows.map(json => new Container(settings, state, json));
+    return isDocker ? sortContainers(containers, sortBy) : containers;
+}
+
+function parseContainerRows(out) {
+    const text = out.trim();
+    if (text === "")
         return [];
+
+    // Podman returns a JSON array; Docker returns newline-delimited objects.
+    if (text.startsWith("[")) {
+        const parsed = JSON.parse(text);
+        return Array.isArray(parsed) ? parsed : [parsed];
     }
 
-    return jsonContainers.map(e => new Container(settings, e));
+    return text
+        .split("\n")
+        .map(line => line.trim())
+        .filter(line => line !== "")
+        .map(line => JSON.parse(line));
+}
+
+const SORT_KEYS = {
+    command: "command",
+    created: "createdAt",
+    id: "id",
+    image: "image",
+    names: "name",
+    runningfor: "runningFor",
+    size: "size",
+    status: "status",
+};
+
+function sortContainers(containers, sortBy) {
+    const key = SORT_KEYS[sortBy] ?? "createdAt";
+    const collator = new Intl.Collator(undefined, {numeric: true, sensitivity: "base"});
+    return [...containers].sort((a, b) => {
+        const av = a[key];
+        const bv = b[key];
+        if (av === undefined || av === null)
+            return bv === undefined || bv === null ? 0 : 1;
+        if (bv === undefined || bv === null)
+            return -1;
+        return collator.compare(String(av), String(bv));
+    });
 }
 
 class Container {
-    constructor(settings, json) {
+    constructor(settings, state, json) {
         this.terminal = settings.get_string("terminal");
+        this.runtimeCmd = state.cmd;
 
-        const isDocker = runtimeCmd === "docker";
+        const isDocker = state.cmd === "docker";
 
         if (isDocker) {
             this.name = typeof json.Names === "string" ? json.Names : json.Names?.[0];
@@ -86,8 +135,10 @@ class Container {
             this.command = json.Command || json.Cmd;
             this.startedAt = json.StartedAt ? new Date(json.StartedAt * 1000) : null;
             this.ports = json.Ports || "n/a";
+            this.runningFor = json.RunningFor;
+            this.size = json.Size;
         } else {
-            if (runtimeVersion && runtimeVersion.newerOrEqualTo("2.0.3")) {
+            if (state.version && state.version.newerOrEqualTo("2.0.3")) {
                 this.name = json.Names?.[0];
                 this.id = json.Id;
                 this.state = json.State;
@@ -112,39 +163,40 @@ class Container {
                 this.ports = "n/a";
             else
                 this.ports = json.Ports?.map(e => `host ${e.host_ip}:${e.host_port}/${e.protocol} -> pod ${e.container_port}`).join(", ");
+            this.runningFor = json.RunningFor;
+            this.size = json.Size;
         }
     }
 
-    start()   { return runCommand("start", this.name); }
-    stop()    { return runCommand("stop", this.name); }
-    rm()      { return runCommand("rm", this.name); }
-    restart() { return runCommand("restart", this.name); }
-    pause()   { return runCommand("pause", this.name); }
-    unpause() { return runCommand("unpause", this.name); }
+    start()   { return runCommand(this.runtimeCmd, "start", this.name); }
+    stop()    { return runCommand(this.runtimeCmd, "stop", this.name); }
+    rm()      { return runCommand(this.runtimeCmd, "rm", this.name); }
+    restart() { return runCommand(this.runtimeCmd, "restart", this.name); }
+    pause()   { return runCommand(this.runtimeCmd, "pause", this.name); }
+    unpause() { return runCommand(this.runtimeCmd, "unpause", this.name); }
 
     logs() {
         const isRunning = this.state === "running" || this.state === "Up";
-        runCommandInTerminal(this.terminal, `${runtimeCmd} logs -f`, this.name, "",
-            isRunning ? TERM_CLOSE_ON_EXIT : TERM_KEEP_ON_EXIT);
+        runCommandInTerminal(this.terminal, `${this.runtimeCmd} logs -f`, this.name, "", !isRunning);
     }
 
     watchTop() {
-        runCommandInTerminal(this.terminal, `watch ${runtimeCmd} top`, this.name, "");
+        runCommandInTerminal(this.terminal, `watch ${this.runtimeCmd} top`, this.name, "");
     }
 
     shell() {
         const loginShellCmd = "sh -c 's=${SHELL:-$(grep ^$(id -un): /etc/passwd 2>/dev/null | cut -d: -f7)}; exec ${s:-/bin/sh}'";
-        runCommandInTerminal(this.terminal, `${runtimeCmd} exec -it`, this.name, loginShellCmd);
+        runCommandInTerminal(this.terminal, `${this.runtimeCmd} exec -it`, this.name, loginShellCmd);
     }
 
     stats() {
-        runCommandInTerminal(this.terminal, `${runtimeCmd} stats`, this.name, "");
+        runCommandInTerminal(this.terminal, `${this.runtimeCmd} stats`, this.name, "");
     }
 
     async inspect() {
         this.ipAddress = "n/a";
         try {
-            const out = await runCommand("inspect --format json", this.name);
+            const out = await runCommand(this.runtimeCmd, "inspect --format json", this.name);
             const json = JSON.parse(out);
             if (json.length > 0) {
                 const config = json[0];
@@ -163,7 +215,7 @@ class Container {
                 }
             }
         } catch (e) {
-            reportError(e, "Error inspecting container");
+            logError(e, "Error inspecting container");
         }
     }
 
@@ -189,7 +241,7 @@ class Container {
     }
 }
 
-export async function spawnCommandline(cmdline) {
+async function spawnCommandline(cmdline) {
     const [, argv] = GLib.shell_parse_argv(cmdline);
     const cmd = Gio.Subprocess.new(argv,
         Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
@@ -201,7 +253,7 @@ export async function spawnCommandline(cmdline) {
     return out;
 }
 
-async function runCommand(command, containerName) {
+async function runCommand(runtimeCmd, command, containerName) {
     const cmdline = `${runtimeCmd} ${command} ${containerName}`;
 
     try {
@@ -210,7 +262,7 @@ async function runCommand(command, containerName) {
     } catch (e) {
         const errMsg = `Error running ${command} on ${containerName}`;
         Main.notify(errMsg, e.message);
-        console.warn(`${errMsg}: ${e.message}`);
+        logError(e, errMsg);
         throw e;
     }
 }
@@ -235,7 +287,7 @@ function runCommandInTerminal(terminal, command, containerName, args, keepOpenOn
     } catch (e) {
         const errMsg = `Error running ${command} on ${containerName}`;
         Main.notify(errMsg, e.message);
-        reportError(e, errMsg);
+        logError(e, errMsg);
     }
 }
 
@@ -248,7 +300,7 @@ function resolveTerminal(terminal) {
             if (argv?.[0] && commandExists(argv[0]))
                 return candidate;
         } catch (e) {
-            reportError(e, `Invalid terminal command "${candidate}"`);
+            logError(e, `Invalid terminal command "${candidate}"`);
         }
     }
 
@@ -262,56 +314,68 @@ function commandExists(command) {
 }
 
 export async function newEventsProcess(onEvent) {
-    if (runtimeVersion === undefined) {
-        if (!discoveringRuntimeVersion)
-            discoveringRuntimeVersion = discoverRuntimeVersion();
-        await discoveringRuntimeVersion;
-    }
+    const state = getRuntimeState(runtimeCmd);
 
     try {
-        const cmdline = `${runtimeCmd} events --filter type=container --format '{"name": "{{ .Name }}"}'`;
+        const cmdline = `${state.cmd} events --filter type=container`;
         const [, argv] = GLib.shell_parse_argv(cmdline);
+        // STDERR_SILENCE keeps an unused stderr pipe from ever filling up.
         const process = Gio.Subprocess.new(argv,
-            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
-        const pipe = process.get_stdout_pipe();
-        _readStream(pipe, onEvent);
-        return process;
+            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
+        const cancellable = new Gio.Cancellable();
+        const readTask = _readStream(process.get_stdout_pipe(), onEvent, cancellable)
+            .catch(() => {});
+        return {
+            process,
+            readTask,
+            cancel() {
+                cancellable.cancel();
+                process.force_exit();
+            },
+        };
     } catch (e) {
-        reportError(e, "Error starting events listener");
-        throw new Error("Error starting events listener");
+        logError(e, "Error starting events listener");
+        throw e;
     }
 }
 
-async function _readStream(inputStream, onEvent) {
-    while (true) {
-        try {
-            const result = await inputStream.read_bytes_async(4096, GLib.PRIORITY_DEFAULT, null);
-            const rawjson = new TextDecoder().decode(result.toArray());
-            if (rawjson === "")
-                break;
+async function _readStream(inputStream, onEvent, cancellable) {
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-            rawjson.split(/\n/).forEach(j => {
-                if (j !== "") {
-                    try {
-                        onEvent(JSON.parse(j));
-                    } catch (e) {
-                        reportError(e, "Error parsing container event");
-                    }
-                }
-            });
+    while (true) {
+        let result;
+        try {
+            result = await inputStream.read_bytes_async(4096, GLib.PRIORITY_DEFAULT, cancellable);
         } catch (e) {
-            reportError(e, "Error reading container events stream");
+            // Cancelled on teardown or the stream closed.
             break;
         }
+        if (result.get_size() === 0)
+            break;
+
+        buffer += decoder.decode(result.toArray(), {stream: true});
+        const lines = buffer.split("\n");
+        // A read can end mid-line; keep the tail for the next chunk.
+        buffer = lines.pop();
+        for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed !== "")
+                onEvent(trimmed);
+        }
     }
+
+    const tail = buffer.trim();
+    if (tail !== "")
+        onEvent(tail);
 }
 
 class Version {
     constructor(v) {
         const splits = v.split(".");
-        this.major = parseInt(splits[0]);
-        this.minor = parseInt(splits[1]);
-        this.patch = splits.length > 2 ? splits[2] : null;
+        this.major = parseInt(splits[0]) || 0;
+        this.minor = parseInt(splits[1]) || 0;
+        this.patch = splits.length > 2 ? parseInt(splits[2]) || 0 : null;
     }
 
     newerOrEqualTo(v) {
@@ -323,11 +387,8 @@ class Version {
             return Math.sign(this.major - other.major);
         if (this.minor !== other.minor)
             return Math.sign(this.minor - other.minor);
-        if (this.patch !== other.patch) {
-            if (this.patch === null)
-                return -1;
-            return this.patch.localeCompare(other.patch);
-        }
-        return 0;
+        const a = this.patch ?? 0;
+        const b = other.patch ?? 0;
+        return Math.sign(a - b);
     }
 }
