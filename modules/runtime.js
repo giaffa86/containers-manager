@@ -20,25 +20,38 @@ let runtimeCmd;
 function getRuntimeState(cmd) {
     let state = runtimeStates.get(cmd);
     if (!state) {
-        state = {cmd, version: undefined, discovery: null};
+        state = {cmd, version: undefined, discovery: null, cancellable: new Gio.Cancellable(), processes: new Set()};
         runtimeStates.set(cmd, state);
     }
     return state;
 }
 
 export function setRuntime(cmd) {
+    reset();
     runtimeCmd = cmd;
+}
+
+export function reset() {
+    for (const state of runtimeStates.values()) {
+        state.cancellable.cancel();
+        for (const process of state.processes)
+            process.force_exit();
+        state.processes.clear();
+    }
+    runtimeStates.clear();
+    runtimeCmd = null;
 }
 
 async function discoverRuntimeVersion(state) {
     try {
-        const out = await spawnCommandline(`${state.cmd} version --format json`);
+        const out = await spawnCommandline(`${state.cmd} version --format json`, state);
         const versionJson = JSON.parse(out);
         const versionString = versionJson?.Client?.Version;
         if (versionString)
             state.version = new Version(versionString);
     } catch (e) {
-        logError(e, `Error getting ${state.cmd} version`);
+        if (!state.cancellable.is_cancelled())
+            logError(e, `Error getting ${state.cmd} version`);
     }
 }
 
@@ -54,6 +67,7 @@ async function ensureRuntimeVersion(state) {
 export async function getContainers(settings) {
     const state = getRuntimeState(runtimeCmd);
     await ensureRuntimeVersion(state);
+    state.cancellable.set_error_if_cancelled();
 
     const sortBy = settings.get_string("sort-by");
     const isDocker = state.cmd === "docker";
@@ -64,10 +78,11 @@ export async function getContainers(settings) {
 
     let rows;
     try {
-        const out = await spawnCommandline(cmdline);
+        const out = await spawnCommandline(cmdline, state);
         rows = parseContainerRows(out);
     } catch (e) {
-        logError(e, `Error fetching containers from ${state.cmd}`);
+        if (!state.cancellable.is_cancelled())
+            logError(e, `Error fetching containers from ${state.cmd}`);
         throw e;
     }
 
@@ -122,6 +137,7 @@ class Container {
     constructor(settings, state, json) {
         this.terminal = settings.get_string("terminal");
         this.runtimeCmd = state.cmd;
+        this._runtimeState = state;
 
         const isDocker = state.cmd === "docker";
 
@@ -168,12 +184,12 @@ class Container {
         }
     }
 
-    start()   { return runCommand(this.runtimeCmd, "start", this.name); }
-    stop()    { return runCommand(this.runtimeCmd, "stop", this.name); }
-    rm()      { return runCommand(this.runtimeCmd, "rm", this.name); }
-    restart() { return runCommand(this.runtimeCmd, "restart", this.name); }
-    pause()   { return runCommand(this.runtimeCmd, "pause", this.name); }
-    unpause() { return runCommand(this.runtimeCmd, "unpause", this.name); }
+    start()   { return runCommand(this._runtimeState, "start", this.name); }
+    stop()    { return runCommand(this._runtimeState, "stop", this.name); }
+    rm()      { return runCommand(this._runtimeState, "rm", this.name); }
+    restart() { return runCommand(this._runtimeState, "restart", this.name); }
+    pause()   { return runCommand(this._runtimeState, "pause", this.name); }
+    unpause() { return runCommand(this._runtimeState, "unpause", this.name); }
 
     logs() {
         const isRunning = this.state === "running" || this.state === "Up";
@@ -195,27 +211,23 @@ class Container {
 
     async inspect() {
         this.ipAddress = "n/a";
-        try {
-            const out = await runCommand(this.runtimeCmd, "inspect --format json", this.name);
-            const json = JSON.parse(out);
-            if (json.length > 0) {
-                const config = json[0];
-                const ns = config.NetworkSettings;
-                if (ns?.IPAddress)
-                    this.ipAddress = ns.IPAddress;
-                if (config.Config?.Entrypoint) {
-                    this.entrypoint = config.Config.Entrypoint;
-                    if (Array.isArray(this.entrypoint))
-                        this.entrypoint = this.entrypoint.join(" ");
-                }
-                if (config.Config?.Cmd) {
-                    this.command = config.Config.Cmd;
-                    if (Array.isArray(this.command))
-                        this.command = this.command.join(" ");
-                }
+        const out = await runCommand(this._runtimeState, "inspect --format json", this.name);
+        const json = JSON.parse(out);
+        if (json.length > 0) {
+            const config = json[0];
+            const ns = config.NetworkSettings;
+            if (ns?.IPAddress)
+                this.ipAddress = ns.IPAddress;
+            if (config.Config?.Entrypoint) {
+                this.entrypoint = config.Config.Entrypoint;
+                if (Array.isArray(this.entrypoint))
+                    this.entrypoint = this.entrypoint.join(" ");
             }
-        } catch (e) {
-            logError(e, "Error inspecting container");
+            if (config.Config?.Cmd) {
+                this.command = config.Config.Cmd;
+                if (Array.isArray(this.command))
+                    this.command = this.command.join(" ");
+            }
         }
     }
 
@@ -241,28 +253,36 @@ class Container {
     }
 }
 
-async function spawnCommandline(cmdline) {
+async function spawnCommandline(cmdline, state) {
+    state.cancellable.set_error_if_cancelled();
     const [, argv] = GLib.shell_parse_argv(cmdline);
     const cmd = Gio.Subprocess.new(argv,
         Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
 
-    const [out, err] = await cmd.communicate_utf8_async(null, null);
-    const status = cmd.get_exit_status();
-    if (status !== 0)
-        throw new Error(`Command terminated with status ${status}: ${err}`);
-    return out;
+    state.processes.add(cmd);
+    try {
+        const [out, err] = await cmd.communicate_utf8_async(null, state.cancellable);
+        state.cancellable.set_error_if_cancelled();
+        if (!cmd.get_successful())
+            throw new Error(`Command failed: ${err}`);
+        return out;
+    } finally {
+        state.processes.delete(cmd);
+    }
 }
 
-async function runCommand(runtimeCmd, command, containerName) {
-    const cmdline = `${runtimeCmd} ${command} ${containerName}`;
+async function runCommand(state, command, containerName) {
+    const cmdline = `${state.cmd} ${command} ${containerName}`;
 
     try {
-        const out = await spawnCommandline(cmdline);
+        const out = await spawnCommandline(cmdline, state);
         return out;
     } catch (e) {
-        const errMsg = `Error running ${command} on ${containerName}`;
-        Main.notify(errMsg, e.message);
-        logError(e, errMsg);
+        if (!state.cancellable.is_cancelled()) {
+            const errMsg = `Error running ${command} on ${containerName}`;
+            Main.notify(errMsg, e.message);
+            logError(e, errMsg);
+        }
         throw e;
     }
 }
@@ -313,7 +333,7 @@ function commandExists(command) {
     return GLib.find_program_in_path(command) !== null;
 }
 
-export async function newEventsProcess(onEvent) {
+export function newEventsProcess(onEvent) {
     const state = getRuntimeState(runtimeCmd);
 
     try {
@@ -323,8 +343,15 @@ export async function newEventsProcess(onEvent) {
         const process = Gio.Subprocess.new(argv,
             Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
         const cancellable = new Gio.Cancellable();
-        const readTask = _readStream(process.get_stdout_pipe(), onEvent, cancellable)
-            .catch(() => {});
+        const inputStream = process.get_stdout_pipe();
+        const readTask = _readStream(inputStream, onEvent, cancellable)
+            .finally(() => {
+                process.force_exit();
+                inputStream.close(null);
+            }).catch(e => {
+                if (!cancellable.is_cancelled())
+                    logError(e, "Error reading container events");
+            });
         return {
             process,
             readTask,
@@ -347,13 +374,8 @@ async function _readStream(inputStream, onEvent, cancellable) {
     let pending = new Uint8Array(0);
 
     while (true) {
-        let result;
-        try {
-            result = await inputStream.read_bytes_async(4096, GLib.PRIORITY_DEFAULT, cancellable);
-        } catch (e) {
-            // Cancelled on teardown or the stream closed.
-            break;
-        }
+        const result = await inputStream.read_bytes_async(4096, GLib.PRIORITY_DEFAULT, cancellable);
+        cancellable.set_error_if_cancelled();
         if (result.get_size() === 0)
             break;
 

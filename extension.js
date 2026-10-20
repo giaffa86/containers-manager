@@ -21,7 +21,6 @@ export default class ContainersManagerExtension extends Extension {
         this._hiddenIds = new Set();
         this._selectedContainerId = null;
         this._syncProcess = null;
-        this._syncGeneration = 0;
 
         Runtime.setRuntime(this._settings.get_string("container-runtime"));
         this._loadDialogStateFromSettings();
@@ -38,16 +37,15 @@ export default class ContainersManagerExtension extends Extension {
             icon_size: 16,
             style_class: "system-status-icon",
         });
-        this._indicatorIcon = icon;
         this._indicatorCountLabel = new St.Label({
             text: "",
             y_align: Clutter.ActorAlign.CENTER,
             style_class: "system-status-icon",
         });
-        this._indicatorBox = new St.BoxLayout({style_class: "panel-status-menu-box"});
-        this._indicatorBox.add_child(this._indicatorIcon);
-        this._indicatorBox.add_child(this._indicatorCountLabel);
-        this._indicator.add_child(this._indicatorBox);
+        const indicatorBox = new St.BoxLayout({style_class: "panel-status-menu-box"});
+        indicatorBox.add_child(icon);
+        indicatorBox.add_child(this._indicatorCountLabel);
+        this._indicator.add_child(indicatorBox);
 
         this._indicator.connectObject("button-press-event", (_actor, event) => {
             if (event.get_button() === Clutter.BUTTON_PRIMARY) {
@@ -75,23 +73,25 @@ export default class ContainersManagerExtension extends Extension {
     disable() {
         this._removeKeybinding();
         this._stopSync();
+        Runtime.reset();
+        this._indicatorRequest = null;
         this._settings.disconnectObject(this);
         this._indicator.disconnectObject(this);
         this._dialog.destroy();
         this._dialog = null;
-        this._indicatorIcon.destroy();
         this._indicatorCountLabel.destroy();
-        this._indicatorBox.destroy();
         this._indicator.destroy();
         this._indicator = null;
-        this._indicatorIcon = null;
         this._indicatorCountLabel = null;
-        this._indicatorBox = null;
         this._settings = null;
+        this._favoriteIds.clear();
+        this._hiddenIds.clear();
+        this._selectedContainerId = null;
     }
 
     _connectSettings() {
         this._settings.connectObject("changed::container-runtime", () => {
+            this._indicatorRequest = null;
             Runtime.setRuntime(this._settings.get_string("container-runtime"));
             if (this._dialog.opened) {
                 // The old events listener belongs to the previous runtime.
@@ -199,15 +199,19 @@ export default class ContainersManagerExtension extends Extension {
     }
 
     _refreshIndicatorCount() {
+        const request = Symbol();
+        this._indicatorRequest = request;
         Runtime.getContainers(this._settings).then(containers => {
-            this._updateIndicatorCount(containers);
+            if (this._indicatorRequest === request)
+                this._updateIndicatorCount(containers);
         }).catch(() => {
-            if (this._indicatorCountLabel)
+            if (this._indicatorRequest === request)
                 this._indicatorCountLabel.text = "";
         });
     }
 
     _updateIndicatorCount(containers) {
+        this._indicatorRequest = null;
         if (!this._indicatorCountLabel)
             return;
 
@@ -216,25 +220,17 @@ export default class ContainersManagerExtension extends Extension {
     }
 
     _startSync() {
-        const generation = ++this._syncGeneration;
-        Runtime.newEventsProcess(() => {
-            if (this._dialog?.opened)
+        this._stopSync();
+        try {
+            this._syncProcess = Runtime.newEventsProcess(() => {
                 this._dialog._refresh();
-        }).then(handle => {
-            if (generation !== this._syncGeneration || !this._dialog?.opened) {
-                handle.cancel();
-                return;
-            }
-
-            this._syncProcess = handle;
-        }).catch(e => {
-            if (generation === this._syncGeneration && this._dialog?.opened)
-                Main.notify("Container events unavailable", e.message);
-        });
+            });
+        } catch (e) {
+            Main.notify("Container events unavailable", e.message);
+        }
     }
 
     _stopSync() {
-        this._syncGeneration++;
         this._syncProcess?.cancel();
         this._syncProcess = null;
     }

@@ -22,6 +22,10 @@ export class ContainerActionMenu extends St.BoxLayout {
 
         this._opts = opts;
         this._container = null;
+        this._copyRequest = null;
+        this.connect("destroy", () => {
+            this._copyRequest = null;
+        });
     }
 
     open(container) {
@@ -71,14 +75,19 @@ export class ContainerActionMenu extends St.BoxLayout {
         this._addAction("Live Stats", "utilities-system-monitor-symbolic", () => this._container.stats());
         this._addAction("Show Logs", "text-x-generic-symbolic", () => this._container.logs());
         this._addAction("Copy inspect data", "edit-copy-symbolic", async () => {
+            const request = Symbol();
+            this._copyRequest = request;
             try {
                 const details = await this._container.details();
+                if (this._copyRequest !== request)
+                    return;
                 const clipboard = St.Clipboard.get_default();
                 clipboard.set_text(St.ClipboardType.CLIPBOARD, details);
                 clipboard.set_text(St.ClipboardType.PRIMARY, details);
                 Main.notify("Inspect data copied");
             } catch (e) {
-                Main.notify("Unable to copy inspect data", e.message);
+                if (this._copyRequest === request)
+                    Main.notify("Unable to copy inspect data", e.message);
             }
         });
 

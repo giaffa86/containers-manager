@@ -74,7 +74,6 @@ export class ContainerCard extends St.BoxLayout {
         ellipsizeLabel(this._imageLabel);
         preview.add_child(this._imageLabel);
 
-        // Action buttons
         const actionsRow = new St.BoxLayout({
             style_class: "card-actions-row",
             x_align: Clutter.ActorAlign.END,
