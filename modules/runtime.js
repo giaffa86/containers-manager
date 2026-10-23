@@ -4,8 +4,14 @@ import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
+// Processes: podman/docker, the configured terminal (or a fallback), and watch -x.
+// The only shell scripts hold the terminal open or select a shell inside the container.
 // Terminals probed in order when the configured terminal is not installed.
 const TERMINAL_FALLBACKS = ["ptyxis --", "kgx --", "gnome-terminal --", "xterm -e"];
+
+// Runs inside the container: prefer SHELL, then the user's passwd entry, then /bin/sh.
+// id, grep and cut are container commands; no container data is inserted into the script.
+const CONTAINER_SHELL_SCRIPT = 's=${SHELL:-$(grep "^$(id -un):" /etc/passwd 2>/dev/null | cut -d: -f7)}; exec "${s:-/bin/sh}"';
 
 Gio._promisify(Gio.Subprocess.prototype,
     "communicate_utf8_async", "communicate_utf8_finish");
@@ -27,6 +33,9 @@ function getRuntimeState(cmd) {
 }
 
 export function setRuntime(cmd) {
+    // Keep the executable restricted to the two runtimes supported by the schema.
+    if (cmd !== "podman" && cmd !== "docker")
+        throw new Error(`Unsupported container runtime: ${cmd}`);
     reset();
     runtimeCmd = cmd;
 }
@@ -44,7 +53,7 @@ export function reset() {
 
 async function discoverRuntimeVersion(state) {
     try {
-        const out = await spawnCommandline(`${state.cmd} version --format json`, state);
+        const out = await spawnArgv([state.cmd, "version", "--format", "json"], state);
         const versionJson = JSON.parse(out);
         const versionString = versionJson?.Client?.Version;
         if (versionString)
@@ -70,15 +79,18 @@ export async function getContainers(settings) {
     state.cancellable.set_error_if_cancelled();
 
     const sortBy = settings.get_string("sort-by");
+    // Only known sort fields may be passed to Podman or used for Docker sorting.
+    if (!Object.hasOwn(SORT_KEYS, sortBy))
+        throw new Error(`Unsupported container sort field: ${sortBy}`);
     const isDocker = state.cmd === "docker";
     // Genuine Docker has no `--sort` flag and emits one JSON object per line.
-    const cmdline = isDocker
-        ? `${state.cmd} ps -a --format json`
-        : `${state.cmd} ps -a --sort ${sortBy} --format json`;
+    const argv = isDocker
+        ? [state.cmd, "ps", "-a", "--format", "json"]
+        : [state.cmd, "ps", "-a", "--sort", sortBy, "--format", "json"];
 
     let rows;
     try {
-        const out = await spawnCommandline(cmdline, state);
+        const out = await spawnArgv(argv, state);
         rows = parseContainerRows(out);
     } catch (e) {
         if (!state.cancellable.is_cancelled())
@@ -184,34 +196,35 @@ class Container {
         }
     }
 
-    start()   { return runCommand(this._runtimeState, "start", this.name); }
-    stop()    { return runCommand(this._runtimeState, "stop", this.name); }
-    rm()      { return runCommand(this._runtimeState, "rm", this.name); }
-    restart() { return runCommand(this._runtimeState, "restart", this.name); }
-    pause()   { return runCommand(this._runtimeState, "pause", this.name); }
-    unpause() { return runCommand(this._runtimeState, "unpause", this.name); }
+    start()   { return runCommand(this._runtimeState, [this.runtimeCmd, "start", this.name]); }
+    stop()    { return runCommand(this._runtimeState, [this.runtimeCmd, "stop", this.name]); }
+    rm()      { return runCommand(this._runtimeState, [this.runtimeCmd, "rm", this.name]); }
+    restart() { return runCommand(this._runtimeState, [this.runtimeCmd, "restart", this.name]); }
+    pause()   { return runCommand(this._runtimeState, [this.runtimeCmd, "pause", this.name]); }
+    unpause() { return runCommand(this._runtimeState, [this.runtimeCmd, "unpause", this.name]); }
 
     logs() {
         const isRunning = this.state === "running" || this.state === "Up";
-        runCommandInTerminal(this.terminal, `${this.runtimeCmd} logs -f`, this.name, "", !isRunning);
+        runCommandInTerminal(this.terminal, [this.runtimeCmd, "logs", "-f", this.name], !isRunning);
     }
 
     watchTop() {
-        runCommandInTerminal(this.terminal, `watch ${this.runtimeCmd} top`, this.name, "");
+        // -x executes the runtime directly, without watch's default sh -c wrapper.
+        runCommandInTerminal(this.terminal, ["watch", "-x", this.runtimeCmd, "top", this.name]);
     }
 
     shell() {
-        const loginShellCmd = "sh -c 's=${SHELL:-$(grep ^$(id -un): /etc/passwd 2>/dev/null | cut -d: -f7)}; exec ${s:-/bin/sh}'";
-        runCommandInTerminal(this.terminal, `${this.runtimeCmd} exec -it`, this.name, loginShellCmd);
+        runCommandInTerminal(this.terminal,
+            [this.runtimeCmd, "exec", "-it", this.name, "sh", "-c", CONTAINER_SHELL_SCRIPT]);
     }
 
     stats() {
-        runCommandInTerminal(this.terminal, `${this.runtimeCmd} stats`, this.name, "");
+        runCommandInTerminal(this.terminal, [this.runtimeCmd, "stats", this.name]);
     }
 
     async inspect() {
         this.ipAddress = "n/a";
-        const out = await runCommand(this._runtimeState, "inspect --format json", this.name);
+        const out = await runCommand(this._runtimeState, [this.runtimeCmd, "inspect", "--format", "json", this.name]);
         const json = JSON.parse(out);
         if (json.length > 0) {
             const config = json[0];
@@ -253,9 +266,9 @@ class Container {
     }
 }
 
-async function spawnCommandline(cmdline, state) {
+async function spawnArgv(argv, state) {
+    // A stale container must not start a process after reset or a runtime switch.
     state.cancellable.set_error_if_cancelled();
-    const [, argv] = GLib.shell_parse_argv(cmdline);
     const cmd = Gio.Subprocess.new(argv,
         Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
 
@@ -267,19 +280,17 @@ async function spawnCommandline(cmdline, state) {
             throw new Error(`Command failed: ${err}`);
         return out;
     } finally {
+        // reset() owns termination while the command is pending.
         state.processes.delete(cmd);
     }
 }
 
-async function runCommand(state, command, containerName) {
-    const cmdline = `${state.cmd} ${command} ${containerName}`;
-
+async function runCommand(state, argv) {
     try {
-        const out = await spawnCommandline(cmdline, state);
-        return out;
+        return await spawnArgv(argv, state);
     } catch (e) {
         if (!state.cancellable.is_cancelled()) {
-            const errMsg = `Error running ${command} on ${containerName}`;
+            const errMsg = `Error running ${argv.join(" ")}`;
             Main.notify(errMsg, e.message);
             logError(e, errMsg);
         }
@@ -287,25 +298,25 @@ async function runCommand(state, command, containerName) {
     }
 }
 
-function runCommandInTerminal(terminal, command, containerName, args, keepOpenOnExit) {
-    terminal = resolveTerminal(terminal);
-    if (!terminal) {
-        const errMsg = `Error running ${command} on ${containerName}`;
+function runCommandInTerminal(terminal, argv, keepOpenOnExit = false) {
+    const terminalArgv = resolveTerminal(terminal);
+    const errMsg = `Error running ${argv.join(" ")}`;
+    if (!terminalArgv) {
         const message = "No supported terminal found. Install ptyxis, kgx, gnome-terminal, or configure a terminal in preferences.";
         Main.notify(errMsg, message);
         return;
     }
 
-    let cmdline;
-    if (keepOpenOnExit)
-        cmdline = `${terminal} bash -c '${command} ${containerName} ${args};read i'`;
-    else
-        cmdline = `${terminal} ${command} ${containerName} ${args}`;
+    // sh consumes the next argument as $0; "$@" forwards the command unchanged.
+    // No runtime or container name is interpolated into the fixed script.
+    const commandArgv = keepOpenOnExit
+        ? ["sh", "-c", '"$@"; read -r _', "sh", ...argv]
+        : argv;
 
     try {
-        GLib.spawn_command_line_async(cmdline);
+        // User-opened terminals remain independent of runtime reset/disable.
+        Gio.Subprocess.new([...terminalArgv, ...commandArgv], Gio.SubprocessFlags.NONE);
     } catch (e) {
-        const errMsg = `Error running ${command} on ${containerName}`;
         Main.notify(errMsg, e.message);
         logError(e, errMsg);
     }
@@ -316,9 +327,10 @@ function resolveTerminal(terminal) {
 
     for (const candidate of candidates) {
         try {
+            // Only this user-configured command line needs parsing; it is not a shell script.
             const [, argv] = GLib.shell_parse_argv(candidate);
             if (argv?.[0] && commandExists(argv[0]))
-                return candidate;
+                return argv;
         } catch (e) {
             logError(e, `Invalid terminal command "${candidate}"`);
         }
@@ -337,10 +349,8 @@ export function newEventsProcess(onEvent) {
     const state = getRuntimeState(runtimeCmd);
 
     try {
-        const cmdline = `${state.cmd} events --filter type=container`;
-        const [, argv] = GLib.shell_parse_argv(cmdline);
         // STDERR_SILENCE keeps an unused stderr pipe from ever filling up.
-        const process = Gio.Subprocess.new(argv,
+        const process = Gio.Subprocess.new([state.cmd, "events", "--filter", "type=container"],
             Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_SILENCE);
         const cancellable = new Gio.Cancellable();
         const inputStream = process.get_stdout_pipe();
