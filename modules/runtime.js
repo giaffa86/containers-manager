@@ -11,7 +11,20 @@ const TERMINAL_FALLBACKS = ["ptyxis --", "kgx --", "gnome-terminal --", "xterm -
 
 // Runs inside the container: prefer SHELL, then the user's passwd entry, then /bin/sh.
 // id, grep and cut are container commands; no container data is inserted into the script.
-const CONTAINER_SHELL_SCRIPT = 's=${SHELL:-$(grep "^$(id -un):" /etc/passwd 2>/dev/null | cut -d: -f7)}; exec "${s:-/bin/sh}"';
+const CONTAINER_SHELL_SCRIPT = `
+# Prefer the shell configured inside the container.
+shell="$SHELL"
+if [ -z "$shell" ]; then
+    # Otherwise look up the current container user's login shell.
+    user=$(id -un)
+    shell=$(grep "^$user:" /etc/passwd 2>/dev/null | cut -d: -f7)
+fi
+if [ -z "$shell" ]; then
+    # Minimal images may have no passwd entry or an empty shell field.
+    shell=/bin/sh
+fi
+exec "$shell"
+`;
 
 Gio._promisify(Gio.Subprocess.prototype,
     "communicate_utf8_async", "communicate_utf8_finish");
@@ -53,7 +66,7 @@ export function reset() {
 
 async function discoverRuntimeVersion(state) {
     try {
-        const out = await spawnArgv([state.cmd, "version", "--format", "json"], state);
+        const out = await runCommand(state, [state.cmd, "version", "--format", "json"], {notify: false});
         const versionJson = JSON.parse(out);
         const versionString = versionJson?.Client?.Version;
         if (versionString)
@@ -90,7 +103,7 @@ export async function getContainers(settings) {
 
     let rows;
     try {
-        const out = await spawnArgv(argv, state);
+        const out = await runCommand(state, argv, {notify: false});
         rows = parseContainerRows(out);
     } catch (e) {
         if (!state.cancellable.is_cancelled())
@@ -205,7 +218,14 @@ class Container {
 
     logs() {
         const isRunning = this.state === "running" || this.state === "Up";
-        runCommandInTerminal(this.terminal, [this.runtimeCmd, "logs", "-f", this.name], !isRunning);
+        if (isRunning) {
+            runCommandInTerminal(this.terminal, [this.runtimeCmd, "logs", "-f", this.name]);
+        } else {
+            // Keep completed logs visible until Enter; runtime/name remain positional arguments.
+            // The second "sh" supplies $0, so "$@" starts with the runtime executable.
+            runCommandInTerminal(this.terminal,
+                ["sh", "-c", '"$@"; read -r _', "sh", this.runtimeCmd, "logs", "-f", this.name]);
+        }
     }
 
     watchTop() {
@@ -266,39 +286,37 @@ class Container {
     }
 }
 
-async function spawnArgv(argv, state) {
+async function runCommand(state, argv, {notify = true} = {}) {
     // A stale container must not start a process after reset or a runtime switch.
     state.cancellable.set_error_if_cancelled();
-    const cmd = Gio.Subprocess.new(argv,
-        Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
 
-    state.processes.add(cmd);
+    let process;
+    // Process creation, communication and a nonzero exit can all fail.
     try {
-        const [out, err] = await cmd.communicate_utf8_async(null, state.cancellable);
+        process = Gio.Subprocess.new(argv,
+            Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE);
+        state.processes.add(process);
+        const [out, err] = await process.communicate_utf8_async(null, state.cancellable);
         state.cancellable.set_error_if_cancelled();
-        if (!cmd.get_successful())
+        if (!process.get_successful())
             throw new Error(`Command failed: ${err}`);
         return out;
-    } finally {
-        // reset() owns termination while the command is pending.
-        state.processes.delete(cmd);
-    }
-}
-
-async function runCommand(state, argv) {
-    try {
-        return await spawnArgv(argv, state);
     } catch (e) {
-        if (!state.cancellable.is_cancelled()) {
+        // Listing/version callers report their own errors; actions also notify the user.
+        if (notify && !state.cancellable.is_cancelled()) {
             const errMsg = `Error running ${argv.join(" ")}`;
             Main.notify(errMsg, e.message);
             logError(e, errMsg);
         }
         throw e;
+    } finally {
+        // reset() owns termination while pending; creation can fail before tracking starts.
+        if (process)
+            state.processes.delete(process);
     }
 }
 
-function runCommandInTerminal(terminal, argv, keepOpenOnExit = false) {
+function runCommandInTerminal(terminal, argv) {
     const terminalArgv = resolveTerminal(terminal);
     const errMsg = `Error running ${argv.join(" ")}`;
     if (!terminalArgv) {
@@ -307,15 +325,10 @@ function runCommandInTerminal(terminal, argv, keepOpenOnExit = false) {
         return;
     }
 
-    // sh consumes the next argument as $0; "$@" forwards the command unchanged.
-    // No runtime or container name is interpolated into the fixed script.
-    const commandArgv = keepOpenOnExit
-        ? ["sh", "-c", '"$@"; read -r _', "sh", ...argv]
-        : argv;
-
+    // Terminal startup can fail even after the executable was found.
     try {
         // User-opened terminals remain independent of runtime reset/disable.
-        Gio.Subprocess.new([...terminalArgv, ...commandArgv], Gio.SubprocessFlags.NONE);
+        Gio.Subprocess.new([...terminalArgv, ...argv], Gio.SubprocessFlags.NONE);
     } catch (e) {
         Main.notify(errMsg, e.message);
         logError(e, errMsg);
