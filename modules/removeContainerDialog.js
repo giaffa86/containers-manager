@@ -1,5 +1,7 @@
 "use strict";
 
+import {gettext as _} from "resource:///org/gnome/shell/extensions/extension.js";
+
 import Clutter from "gi://Clutter";
 import GObject from "gi://GObject";
 import * as Dialog from "resource:///org/gnome/shell/ui/dialog.js";
@@ -13,13 +15,13 @@ export class RemoveContainerDialog extends ModalDialog.ModalDialog {
     constructor(container) {
         super();
         const content = new Dialog.MessageDialogContent({
-            title: "Remove Container",
-            description: `Are you sure you want to remove container ${container.name}?`,
+            title: _("Remove Container"),
+            description: _("Are you sure you want to remove container %s?").format(container.name),
         });
         this.contentLayout.add_child(content);
         this.addButton({
             action: () => this.close(),
-            label: "Cancel",
+            label: _("Cancel"),
             key: Clutter.KEY_Escape,
         });
         this.addButton({
@@ -29,7 +31,7 @@ export class RemoveContainerDialog extends ModalDialog.ModalDialog {
                     // Runtime already reports command errors and shows the user-facing notification.
                 });
             },
-            label: "Remove",
+            label: _("Remove"),
         });
     }
 }

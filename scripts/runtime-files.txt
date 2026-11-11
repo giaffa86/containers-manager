@@ -1,0 +1,17 @@
+metadata.json
+extension.js
+prefs.js
+stylesheet.css
+modules/containerActionMenu.js
+modules/containerCard.js
+modules/containerDialog.js
+modules/removeContainerDialog.js
+modules/runtime.js
+modules/utils.js
+icons/containers-manager-symbolic.svg
+schemas/org.gnome.shell.extensions.containers-manager.gschema.xml
+LICENSE
+locale/it/LC_MESSAGES/containers-manager.mo
+locale/es/LC_MESSAGES/containers-manager.mo
+locale/de/LC_MESSAGES/containers-manager.mo
+locale/fr/LC_MESSAGES/containers-manager.mo

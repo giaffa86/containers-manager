@@ -24,3 +24,7 @@ core.*
 
 # Serena editor state
 .serena/
+
+# Build outputs
+/dist/
+/locale/**/*.mo

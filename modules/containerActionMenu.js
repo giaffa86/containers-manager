@@ -1,5 +1,7 @@
 "use strict";
 
+import {gettext as _} from "resource:///org/gnome/shell/extensions/extension.js";
+
 import Clutter from "gi://Clutter";
 import GObject from "gi://GObject";
 import St from "gi://St";
@@ -56,25 +58,25 @@ export class ContainerActionMenu extends St.BoxLayout {
         const isHidden = this._opts.isHidden(this._container.id);
 
         if (isRunning)
-            this._addAction("Pause", "media-playback-pause-symbolic", () => this._runCommand(() => this._container.pause()));
+            this._addAction(_("Pause"), "media-playback-pause-symbolic", () => this._runCommand(() => this._container.pause()));
         if (isPaused)
-            this._addAction("Unpause", "media-playback-start-symbolic", () => this._runCommand(() => this._container.unpause()));
+            this._addAction(_("Unpause"), "media-playback-start-symbolic", () => this._runCommand(() => this._container.unpause()));
 
         if (isRunning || isPaused)
             this._addSeparator();
 
         this._addAction(
-            isHidden ? "Show" : "Hide",
+            isHidden ? _("Show") : _("Hide"),
             isHidden ? "view-reveal-symbolic" : "view-conceal-symbolic",
             () => this._opts.onToggleHidden(this._container)
         );
         this._addSeparator();
 
-        this._addAction("Top Resources", "view-list-symbolic", () => this._container.watchTop());
-        this._addAction("Open Shell", "utilities-terminal-symbolic", () => this._container.shell());
-        this._addAction("Live Stats", "utilities-system-monitor-symbolic", () => this._container.stats());
-        this._addAction("Show Logs", "text-x-generic-symbolic", () => this._container.logs());
-        this._addAction("Copy inspect data", "edit-copy-symbolic", async () => {
+        this._addAction(_("Top Resources"), "view-list-symbolic", () => this._container.watchTop());
+        this._addAction(_("Open Shell"), "utilities-terminal-symbolic", () => this._container.shell());
+        this._addAction(_("Live Stats"), "utilities-system-monitor-symbolic", () => this._container.stats());
+        this._addAction(_("Show Logs"), "text-x-generic-symbolic", () => this._container.logs());
+        this._addAction(_("Copy inspect data"), "edit-copy-symbolic", async () => {
             const request = Symbol();
             this._copyRequest = request;
             try {
@@ -84,16 +86,16 @@ export class ContainerActionMenu extends St.BoxLayout {
                 const clipboard = St.Clipboard.get_default();
                 clipboard.set_text(St.ClipboardType.CLIPBOARD, details);
                 clipboard.set_text(St.ClipboardType.PRIMARY, details);
-                Main.notify("Inspect data copied");
+                Main.notify(_("Inspect data copied"));
             } catch (e) {
                 if (this._copyRequest === request)
-                    Main.notify("Unable to copy inspect data", e.message);
+                    Main.notify(_("Unable to copy inspect data"), e.message);
             }
         });
 
         if (category === "stopped") {
             this._addSeparator();
-            this._addAction("Remove", "user-trash-symbolic",
+            this._addAction(_("Remove"), "user-trash-symbolic",
                 () => this._opts.onDelete(this._container), "danger");
         }
     }

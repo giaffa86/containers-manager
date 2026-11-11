@@ -8,7 +8,7 @@ import St from "gi://St";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import * as PanelMenu from "resource:///org/gnome/shell/ui/panelMenu.js";
 
-import {Extension} from "resource:///org/gnome/shell/extensions/extension.js";
+import {Extension, gettext as _} from "resource:///org/gnome/shell/extensions/extension.js";
 
 import * as Runtime from "./modules/runtime.js";
 import {ContainerDialog} from "./modules/containerDialog.js";
@@ -226,7 +226,7 @@ export default class ContainersManagerExtension extends Extension {
                 this._dialog._refresh();
             });
         } catch (e) {
-            Main.notify("Container events unavailable", e.message);
+            Main.notify(_("Container events unavailable"), e.message);
         }
     }
 

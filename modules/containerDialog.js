@@ -1,5 +1,7 @@
 "use strict";
 
+import {gettext as _} from "resource:///org/gnome/shell/extensions/extension.js";
+
 import Clutter from "gi://Clutter";
 import GLib from "gi://GLib";
 import GObject from "gi://GObject";
@@ -80,14 +82,14 @@ export class ContainerDialog extends St.Widget {
                 style_class: "dialog-search-filter-content",
             }),
         });
-        this._filterToggleBtn.set_accessible_name("Filter containers");
+        this._filterToggleBtn.set_accessible_name(_("Filter containers"));
         this._filterToggleBtn.child.add_child(this._filterToggleIcon);
         this._filterToggleBtn.child.add_child(this._filterToggleArrow);
         this._filterToggleBtn.connect("clicked", () => this._toggleFilterMenu());
         searchRow.add_child(this._filterToggleBtn);
 
         this._searchEntry = new St.Entry({
-            hint_text: "Type to search...",
+            hint_text: _("Type to search..."),
             style_class: "dialog-search-entry",
             can_focus: true,
             x_expand: true,
@@ -119,7 +121,7 @@ export class ContainerDialog extends St.Widget {
             }),
         });
         this._searchFavoriteBtn = searchFavoriteBtn;
-        searchFavoriteBtn.set_accessible_name("Show favorite containers only");
+        searchFavoriteBtn.set_accessible_name(_("Show favorite containers only"));
         searchFavoriteBtn.connect("clicked", () => {
             this._ext._favoritesOnly = searchFavoriteBtn.checked;
             this._ext._persistDialogState();
@@ -138,11 +140,11 @@ export class ContainerDialog extends St.Widget {
         this._box.add_child(searchWrap);
         this._statusFilterButtons = new Map();
         this._statusFilterIcons = new Map();
-        this._addFilterOption("all", "All containers", "view-list-symbolic");
-        this._addFilterOption("running", "Running", "media-playback-start-symbolic");
-        this._addFilterOption("stopped", "Stopped", "media-playback-stop-symbolic");
-        this._addFilterOption("paused", "Paused", "media-playback-pause-symbolic");
-        this._addFilterOption("other", "Other states", "action-unavailable-symbolic");
+        this._addFilterOption("all", _("All containers"), "view-list-symbolic");
+        this._addFilterOption("running", _("Running"), "media-playback-start-symbolic");
+        this._addFilterOption("stopped", _("Stopped"), "media-playback-stop-symbolic");
+        this._addFilterOption("paused", _("Paused"), "media-playback-pause-symbolic");
+        this._addFilterOption("other", _("Other states"), "action-unavailable-symbolic");
         this._filterMenu.add_child(new St.Bin({style_class: "container-action-menu-separator"}));
         this._addHiddenFilterOption();
         this._syncFilterMenu();
@@ -175,7 +177,7 @@ export class ContainerDialog extends St.Widget {
         this.add_child(this._actionMenu);
 
         this._noContainersLabel = new St.Label({
-            text: "No containers found",
+            text: _("No containers found"),
             style_class: "dialog-no-containers",
             x_expand: true,
             y_align: Clutter.ActorAlign.CENTER,
@@ -210,7 +212,7 @@ export class ContainerDialog extends St.Widget {
             can_focus: true,
             child: this._eyeIcon,
         });
-        this._eyeBtn.set_accessible_name("Show stopped containers");
+        this._eyeBtn.set_accessible_name(_("Show stopped containers"));
         this._eyeBtn.connect("clicked", () => {
             this._ext._showStopped = !this._ext._showStopped;
             this._eyeBtn.checked = this._ext._showStopped;
@@ -322,7 +324,7 @@ export class ContainerDialog extends St.Widget {
             this._cardList.destroy_all_children();
             this._containerCards.clear();
             this._scrollView.visible = false;
-            this._noContainersLabel.text = `Unable to load containers: ${err.message}`;
+            this._noContainersLabel.text = _("Unable to load containers: %s").format(err.message);
             this._noContainersLabel.visible = true;
             this._positionBox();
         });
@@ -446,8 +448,8 @@ export class ContainerDialog extends St.Widget {
         const hasContainers = this._containerCards.size > 0;
         this._scrollView.visible = hasContainers && visibleCount > 0;
         this._noContainersLabel.text = hasContainers
-            ? "No matching containers"
-            : "No containers found";
+            ? _("No matching containers")
+            : _("No containers found");
         this._noContainersLabel.visible = !hasContainers || visibleCount === 0;
 
         if (this._open)
@@ -497,11 +499,11 @@ export class ContainerDialog extends St.Widget {
             x_expand: true,
             can_focus: true,
         });
-        btn.set_accessible_name("Show hidden containers");
+        btn.set_accessible_name(_("Show hidden containers"));
         const row = new St.BoxLayout({style_class: "dialog-filter-option-row"});
         row.add_child(new St.Icon({icon_name: "view-reveal-symbolic", icon_size: 14, style_class: "popup-menu-icon"}));
         row.add_child(new St.Label({
-            text: "Show hidden",
+            text: _("Show hidden"),
             style_class: "dialog-filter-option-label",
             y_align: Clutter.ActorAlign.CENTER,
             x_expand: true,
@@ -578,7 +580,7 @@ export class ContainerDialog extends St.Widget {
             child: new St.Icon({icon_name: iconName, icon_size: 16}),
         });
         if (iconName === "emblem-system-symbolic")
-            btn.set_accessible_name("Open preferences");
+            btn.set_accessible_name(_("Open preferences"));
         btn.connect("clicked", callback);
         return btn;
     }
@@ -619,10 +621,10 @@ export class ContainerDialog extends St.Widget {
             ? "media-playback-stop-symbolic"
             : "media-playback-start-symbolic";
         this._toggleRunActionBtn.set_accessible_name(canStop
-            ? "Stop selected container"
-            : "Start selected container");
+            ? _("Stop selected container")
+            : _("Start selected container"));
         this._setActionButtonEnabled(this._toggleRunActionBtn, canStart || canStop);
-        this._restartActionBtn.set_accessible_name("Restart selected container");
+        this._restartActionBtn.set_accessible_name(_("Restart selected container"));
         this._setActionButtonEnabled(this._restartActionBtn, category === "running" || category === "paused");
     }
 
@@ -670,8 +672,8 @@ export class ContainerDialog extends St.Widget {
             ? "view-reveal-symbolic"
             : "view-conceal-symbolic";
         this._eyeBtn.set_accessible_name(this._ext._showStopped
-            ? "Hide stopped containers"
-            : "Show stopped containers");
+            ? _("Hide stopped containers")
+            : _("Show stopped containers"));
     }
 
     _positionBox() {

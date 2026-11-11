@@ -6,5 +6,6 @@
   "shell-version": [
     "50"
   ],
-  "settings-schema": "org.gnome.shell.extensions.containers-manager"
+  "settings-schema": "org.gnome.shell.extensions.containers-manager",
+  "gettext-domain": "containers-manager"
 }

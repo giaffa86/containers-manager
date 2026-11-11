@@ -178,7 +178,8 @@ export default class ContainersManagerPreferences extends ExtensionPreferences {
             window._settings,
             "sort-by",
             _("Sort containers by"),
-            ["command", "created", "id", "image", "names", "runningfor", "size", "status"]
+            ["command", "created", "id", "image", "names", "runningfor", "size", "status"],
+            [_("Command"), _("Created"), _("ID"), _("Image"), _("Name"), _("Running time"), _("Size"), _("Status")]
         ));
 
         const shortcutsPage = new Adw.PreferencesPage({

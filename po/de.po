@@ -1,0 +1,391 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+msgid ""
+msgstr ""
+"Project-Id-Version: Containers Manager\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-11 00:00+0100\n"
+"PO-Revision-Date: 2026-11-11 00:00+0100\n"
+"Last-Translator: giaffa86 contributors\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language-Team: German\n"
+"Language: de\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: extension.js:229
+msgid "Container events unavailable"
+msgstr "Container-Ereignisse nicht verfügbar"
+
+#: modules/containerActionMenu.js:61
+msgid "Pause"
+msgstr "Pausieren"
+
+#: modules/containerActionMenu.js:63
+msgid "Unpause"
+msgstr "Fortsetzen"
+
+#: modules/containerActionMenu.js:69
+msgid "Hide"
+msgstr "Ausblenden"
+
+#: modules/containerActionMenu.js:69
+msgid "Show"
+msgstr "Anzeigen"
+
+#: modules/containerActionMenu.js:75
+msgid "Top Resources"
+msgstr "Prozesse und Ressourcen"
+
+#: modules/containerActionMenu.js:76
+msgid "Open Shell"
+msgstr "Shell öffnen"
+
+#: modules/containerActionMenu.js:77
+msgid "Live Stats"
+msgstr "Live-Statistiken"
+
+#: modules/containerActionMenu.js:78
+msgid "Show Logs"
+msgstr "Protokolle anzeigen"
+
+#: modules/containerActionMenu.js:79
+msgid "Copy inspect data"
+msgstr "Inspektionsdaten kopieren"
+
+#: modules/containerActionMenu.js:89
+msgid "Inspect data copied"
+msgstr "Inspektionsdaten kopiert"
+
+#: modules/containerActionMenu.js:92
+msgid "Unable to copy inspect data"
+msgstr "Inspektionsdaten konnten nicht kopiert werden"
+
+#: modules/containerActionMenu.js:98 modules/removeContainerDialog.js:34
+msgid "Remove"
+msgstr "Entfernen"
+
+#: modules/containerCard.js:92 modules/containerCard.js:285
+#, javascript-format
+msgid "Remove %s"
+msgstr "%s entfernen"
+
+#: modules/containerCard.js:110 modules/containerCard.js:231
+#: modules/containerCard.js:288
+#, javascript-format
+msgid "Add %s to favorites"
+msgstr "%s zu Favoriten hinzufügen"
+
+#: modules/containerCard.js:126 modules/containerCard.js:289
+#, javascript-format
+msgid "More actions for %s"
+msgstr "Weitere Aktionen für %s"
+
+#: modules/containerCard.js:230 modules/containerCard.js:287
+#, javascript-format
+msgid "Remove %s from favorites"
+msgstr "%s aus Favoriten entfernen"
+
+#: modules/containerDialog.js:85
+msgid "Filter containers"
+msgstr "Container filtern"
+
+#: modules/containerDialog.js:92
+msgid "Type to search..."
+msgstr "Suchbegriff eingeben…"
+
+#: modules/containerDialog.js:124
+msgid "Show favorite containers only"
+msgstr "Nur bevorzugte Container anzeigen"
+
+#: modules/containerDialog.js:143
+msgid "All containers"
+msgstr "Alle Container"
+
+#: modules/containerDialog.js:144 prefs.js:124
+msgid "Running"
+msgstr "Laufend"
+
+#: modules/containerDialog.js:145 prefs.js:124
+msgid "Stopped"
+msgstr "Gestoppt"
+
+#: modules/containerDialog.js:146 prefs.js:124
+msgid "Paused"
+msgstr "Pausiert"
+
+#: modules/containerDialog.js:147 prefs.js:124
+msgid "Other states"
+msgstr "Andere Zustände"
+
+#: modules/containerDialog.js:180 modules/containerDialog.js:452
+msgid "No containers found"
+msgstr "Keine Container gefunden"
+
+#: modules/containerDialog.js:215 modules/containerDialog.js:676
+msgid "Show stopped containers"
+msgstr "Gestoppte Container anzeigen"
+
+#: modules/containerDialog.js:327
+#, javascript-format
+msgid "Unable to load containers: %s"
+msgstr "Container konnten nicht geladen werden: %s"
+
+#: modules/containerDialog.js:451
+msgid "No matching containers"
+msgstr "Keine passenden Container"
+
+#: modules/containerDialog.js:502
+msgid "Show hidden containers"
+msgstr "Ausgeblendete Container anzeigen"
+
+#: modules/containerDialog.js:506
+msgid "Show hidden"
+msgstr "Ausgeblendete anzeigen"
+
+#: modules/containerDialog.js:583
+msgid "Open preferences"
+msgstr "Einstellungen öffnen"
+
+#: modules/containerDialog.js:624
+msgid "Stop selected container"
+msgstr "Ausgewählten Container stoppen"
+
+#: modules/containerDialog.js:625
+msgid "Start selected container"
+msgstr "Ausgewählten Container starten"
+
+#: modules/containerDialog.js:627
+msgid "Restart selected container"
+msgstr "Ausgewählten Container neu starten"
+
+#: modules/containerDialog.js:675
+msgid "Hide stopped containers"
+msgstr "Gestoppte Container ausblenden"
+
+#: modules/removeContainerDialog.js:18
+msgid "Remove Container"
+msgstr "Container entfernen"
+
+#: modules/removeContainerDialog.js:19
+#, javascript-format
+msgid "Are you sure you want to remove container %s?"
+msgstr "Soll der Container %s wirklich entfernt werden?"
+
+#: modules/removeContainerDialog.js:24
+msgid "Cancel"
+msgstr "Abbrechen"
+
+#: modules/runtime.js:271
+#, javascript-format
+msgid "Name: %s"
+msgstr "Name: %s"
+
+#: modules/runtime.js:272
+#, javascript-format
+msgid "ID: %s"
+msgstr "ID: %s"
+
+#: modules/runtime.js:273
+#, javascript-format
+msgid "Status: %s"
+msgstr "Status: %s"
+
+#: modules/runtime.js:274
+#, javascript-format
+msgid "Image: %s"
+msgstr "Image: %s"
+
+#: modules/runtime.js:275
+#, javascript-format
+msgid "Created: %s"
+msgstr "Erstellt: %s"
+
+#: modules/runtime.js:276
+#, javascript-format
+msgid "Started: %s"
+msgstr "Gestartet: %s"
+
+#: modules/runtime.js:276
+msgid "never"
+msgstr "nie"
+
+#: modules/runtime.js:277
+#, javascript-format
+msgid "Ports: %s"
+msgstr "Ports: %s"
+
+#: modules/runtime.js:281
+#, javascript-format
+msgid "IP Address: %s"
+msgstr "IP-Adresse: %s"
+
+#: modules/runtime.js:283
+#, javascript-format
+msgid "Entrypoint: %s"
+msgstr "Einstiegspunkt: %s"
+
+#: modules/runtime.js:285
+#, javascript-format
+msgid "Command: %s"
+msgstr "Befehl: %s"
+
+#: modules/runtime.js:304
+#, javascript-format
+msgid "Command failed: %s"
+msgstr "Befehl fehlgeschlagen: %s"
+
+#: modules/runtime.js:309 modules/runtime.js:323
+#, javascript-format
+msgid "Error running %s"
+msgstr "Fehler beim Ausführen von %s"
+
+#: modules/runtime.js:325
+msgid ""
+"No supported terminal found. Install ptyxis, kgx, gnome-terminal, or "
+"configure a terminal in preferences."
+msgstr ""
+"Kein unterstütztes Terminal gefunden. Installiere ptyxis, kgx oder gnome-"
+"terminal oder konfiguriere ein Terminal in den Einstellungen."
+
+#: prefs.js:17
+msgid "Reset to default"
+msgstr "Auf Standard zurücksetzen"
+
+#: prefs.js:93
+msgid "General"
+msgstr "Allgemein"
+
+#: prefs.js:99
+msgid "Container Runtime"
+msgstr "Container-Laufzeitumgebung"
+
+#: prefs.js:100
+msgid "Choose the container runtime to manage"
+msgstr "Zu verwaltende Container-Laufzeitumgebung auswählen"
+
+#: prefs.js:108
+msgid "Runtime"
+msgstr "Laufzeitumgebung"
+
+#: prefs.js:113
+msgid "Behaviour"
+msgstr "Verhalten"
+
+#: prefs.js:114
+msgid "Configure how the dialog opens and remembers state"
+msgstr "Öffnen des Dialogs und Speichern seines Zustands konfigurieren"
+
+#: prefs.js:122
+msgid "Default status filter"
+msgstr "Standard-Statusfilter"
+
+#: prefs.js:124
+msgid "All"
+msgstr "Alle"
+
+#: prefs.js:128
+msgid "Remember dialog state"
+msgstr "Dialogzustand speichern"
+
+#: prefs.js:129
+msgid "Keep search, status filter, stopped visibility, and favorites-only mode"
+msgstr ""
+"Suche, Statusfilter, Sichtbarkeit gestoppter Container und Favoritenmodus "
+"beibehalten"
+
+#: prefs.js:136
+msgid "Terminal"
+msgstr "Terminal"
+
+#: prefs.js:137
+msgid "Configure the terminal used for shell, logs, stats, and top"
+msgstr "Terminal für Shell, Protokolle, Statistiken und Prozesse konfigurieren"
+
+#: prefs.js:142
+msgid "Terminal program with arguments"
+msgstr "Terminalprogramm mit Argumenten"
+
+#: prefs.js:150
+msgid "Appearance"
+msgstr "Darstellung"
+
+#: prefs.js:156
+msgid "Panel Indicator"
+msgstr "Panel-Anzeige"
+
+#: prefs.js:157
+msgid "Configure the top panel indicator"
+msgstr "Anzeige im oberen Panel konfigurieren"
+
+#: prefs.js:165
+msgid "Indicator display"
+msgstr "Darstellung der Anzeige"
+
+#: prefs.js:167
+msgid "Icon only"
+msgstr "Nur Symbol"
+
+#: prefs.js:167
+msgid "Icon with running count"
+msgstr "Symbol mit Anzahl laufender Container"
+
+#: prefs.js:171
+msgid "Container List"
+msgstr "Container-Liste"
+
+#: prefs.js:172
+msgid "Configure the container cards"
+msgstr "Container-Karten konfigurieren"
+
+#: prefs.js:180
+msgid "Sort containers by"
+msgstr "Container sortieren nach"
+
+#: prefs.js:182
+msgid "Command"
+msgstr "Befehl"
+
+#: prefs.js:182
+msgid "Created"
+msgstr "Erstellung"
+
+#: prefs.js:182
+msgid "ID"
+msgstr "ID"
+
+#: prefs.js:182
+msgid "Image"
+msgstr "Image"
+
+#: prefs.js:182
+msgid "Name"
+msgstr "Name"
+
+#: prefs.js:182
+msgid "Running time"
+msgstr "Laufzeit"
+
+#: prefs.js:182
+msgid "Size"
+msgstr "Größe"
+
+#: prefs.js:182
+msgid "Status"
+msgstr "Status"
+
+#: prefs.js:186
+msgid "Shortcuts"
+msgstr "Tastenkürzel"
+
+#: prefs.js:192
+msgid "Dialog"
+msgstr "Dialog"
+
+#: prefs.js:193
+msgid "Keyboard shortcuts for the containers dialog"
+msgstr "Tastenkürzel für den Container-Dialog"
+
+#: prefs.js:200
+msgid "Open or close dialog"
+msgstr "Dialog öffnen oder schließen"

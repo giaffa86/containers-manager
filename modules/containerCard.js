@@ -1,5 +1,7 @@
 "use strict";
 
+import {gettext as _} from "resource:///org/gnome/shell/extensions/extension.js";
+
 import Clutter from "gi://Clutter";
 import GObject from "gi://GObject";
 import St from "gi://St";
@@ -87,7 +89,7 @@ export class ContainerCard extends St.BoxLayout {
             y_expand: false,
             child: new St.Icon({icon_name: "user-trash-symbolic", icon_size: 14}),
         });
-        this._deleteBtn.set_accessible_name(`Remove ${container.name}`);
+        this._deleteBtn.set_accessible_name(_("Remove %s").format(container.name));
         this._deleteBtn.connect("clicked", () => {
             this._select();
             this._opts.onDelete(this._container);
@@ -105,7 +107,7 @@ export class ContainerCard extends St.BoxLayout {
             y_expand: false,
             child: new St.Icon({icon_name: "starred-symbolic", icon_size: 14}),
         });
-        this._favoriteBtn.set_accessible_name(`Add ${container.name} to favorites`);
+        this._favoriteBtn.set_accessible_name(_("Add %s to favorites").format(container.name));
         this._favoriteBtn.connect("clicked", () => {
             this._select();
             this.setFavorite(this._opts.onToggleFavorite(this._container.id));
@@ -121,7 +123,7 @@ export class ContainerCard extends St.BoxLayout {
             y_expand: false,
             child: new St.Icon({icon_name: "view-more-symbolic", icon_size: 14}),
         });
-        this._kebabBtn.set_accessible_name(`More actions for ${container.name}`);
+        this._kebabBtn.set_accessible_name(_("More actions for %s").format(container.name));
         this._kebabBtn.connect("clicked", () => {
             this._select();
             this._opts.onOpenMenu(this, this._kebabBtn);
@@ -225,8 +227,8 @@ export class ContainerCard extends St.BoxLayout {
     setFavorite(favorite) {
         this._favoriteBtn.checked = favorite;
         this._favoriteBtn.set_accessible_name(favorite
-            ? `Remove ${this._container.name} from favorites`
-            : `Add ${this._container.name} to favorites`);
+            ? _("Remove %s from favorites").format(this._container.name)
+            : _("Add %s to favorites").format(this._container.name));
     }
 
     setSelected(selected) {
@@ -280,16 +282,16 @@ export class ContainerCard extends St.BoxLayout {
         this._statusIcon.icon_name = iconName;
         this._statusIcon.style_class = `card-status-icon ${styleClass}`;
         this._statusLabel.text = container.status;
-        this._deleteBtn.set_accessible_name(`Remove ${container.name}`);
+        this._deleteBtn.set_accessible_name(_("Remove %s").format(container.name));
         this._favoriteBtn.set_accessible_name(this._favoriteBtn.checked
-            ? `Remove ${container.name} from favorites`
-            : `Add ${container.name} to favorites`);
-        this._kebabBtn.set_accessible_name(`More actions for ${container.name}`);
+            ? _("Remove %s from favorites").format(container.name)
+            : _("Add %s to favorites").format(container.name));
+        this._kebabBtn.set_accessible_name(_("More actions for %s").format(container.name));
 
         if (container.createdAt) {
             const d = new Date(container.createdAt);
             if (!isNaN(d.getTime()))
-                this._createdLabel.text = d.toLocaleDateString("en-US", {month: "short", day: "numeric"});
+                this._createdLabel.text = d.toLocaleDateString(undefined, {month: "short", day: "numeric"});
             else
                 this._createdLabel.text = container.createdAt;
         } else {

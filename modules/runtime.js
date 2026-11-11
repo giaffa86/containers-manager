@@ -1,5 +1,7 @@
 "use strict";
 
+import {gettext as _} from "resource:///org/gnome/shell/extensions/extension.js";
+
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
@@ -266,21 +268,21 @@ class Container {
 
     async details() {
         const lines = [
-            `Name: ${this.name}`,
-            `ID: ${this.id}`,
-            `Status: ${this.status}`,
-            `Image: ${this.image}`,
-            `Created: ${this.createdAt}`,
-            `Started: ${this.startedAt || "never"}`,
-            `Ports: ${this.ports}`,
+            _("Name: %s").format(this.name),
+            _("ID: %s").format(this.id),
+            _("Status: %s").format(this.status),
+            _("Image: %s").format(this.image),
+            _("Created: %s").format(this.createdAt),
+            _("Started: %s").format(this.startedAt || _("never")),
+            _("Ports: %s").format(this.ports),
         ];
 
         await this.inspect();
-        lines.push(`IP Address: ${this.ipAddress}`);
+        lines.push(_("IP Address: %s").format(this.ipAddress));
         if (this.entrypoint)
-            lines.push(`Entrypoint: ${this.entrypoint}`);
+            lines.push(_("Entrypoint: %s").format(this.entrypoint));
         if (this.command)
-            lines.push(`Command: ${this.command}`);
+            lines.push(_("Command: %s").format(this.command));
 
         return lines.join("\n");
     }
@@ -299,12 +301,12 @@ async function runCommand(state, argv, {notify = true} = {}) {
         const [out, err] = await process.communicate_utf8_async(null, state.cancellable);
         state.cancellable.set_error_if_cancelled();
         if (!process.get_successful())
-            throw new Error(`Command failed: ${err}`);
+            throw new Error(_("Command failed: %s").format(err));
         return out;
     } catch (e) {
         // Listing/version callers report their own errors; actions also notify the user.
         if (notify && !state.cancellable.is_cancelled()) {
-            const errMsg = `Error running ${argv.join(" ")}`;
+            const errMsg = _("Error running %s").format(argv.join(" "));
             Main.notify(errMsg, e.message);
             logError(e, errMsg);
         }
@@ -318,9 +320,9 @@ async function runCommand(state, argv, {notify = true} = {}) {
 
 function runCommandInTerminal(terminal, argv) {
     const terminalArgv = resolveTerminal(terminal);
-    const errMsg = `Error running ${argv.join(" ")}`;
+    const errMsg = _("Error running %s").format(argv.join(" "));
     if (!terminalArgv) {
-        const message = "No supported terminal found. Install ptyxis, kgx, gnome-terminal, or configure a terminal in preferences.";
+        const message = _("No supported terminal found. Install ptyxis, kgx, gnome-terminal, or configure a terminal in preferences.");
         Main.notify(errMsg, message);
         return;
     }

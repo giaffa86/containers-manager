@@ -6,20 +6,12 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_DIR="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 TARGET_DIR="${HOME}/.local/share/gnome-shell/extensions/${UUID}"
 
-mkdir -p "${TARGET_DIR}"
-
-rsync -av --delete --delete-excluded \
-  --exclude='.git' \
-  --exclude='.gitignore' \
-  --exclude='*.md' \
-  --exclude='*.sh' \
-  --exclude='scripts' \
-  --exclude='private' \
-  --exclude='.agents' \
-  --exclude='.codex' \
-  --exclude='.claude' \
-  "${SOURCE_DIR}/" \
-  "${TARGET_DIR}/"
+cd "$SOURCE_DIR"
+./scripts/i18n.sh compile
+while IFS= read -r file; do
+    mkdir -p -- "$TARGET_DIR/$(dirname -- "$file")"
+    cp -- "$file" "$TARGET_DIR/$file"
+done < scripts/runtime-files.txt
 
 glib-compile-schemas "${TARGET_DIR}/schemas/"
 
